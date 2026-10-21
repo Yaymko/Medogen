@@ -1,0 +1,14 @@
+{
+  "description": "3.0: ТК «Цифровой документ ГосЭДО» (TC00000007, digital.edc.zip)",
+  "format": "3.0",
+  "type": "gosedo",
+  "name": "Цифровой документ",
+  "from": "pravit_mo",
+  "to": ["mo_duma", "mincifry"],
+  "document": {
+    "annotation": "О направлении информации",
+    "reg_number": "ЦД-1",
+    "include_pdf": true,
+    "attachments": [{"description": "Справка", "pages": 1}]
+  }
+}

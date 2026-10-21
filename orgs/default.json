@@ -1,0 +1,13 @@
+{
+  "stand": "пример (GUID, названия и адреса из ГАС ГосЭДО от 20.10.2026)",
+  "self": "pravit_mo",
+  "orgs": {
+    "pravit_mo": {"guid": "b72c0f24-d3dc-4cbf-8bfe-5da94daa18bf", "name": "Правительство Московской области", "address": "PRAVMO_S~MEDOGU"},
+    "mo_duma": {"guid": "0c52f66a-b3d2-4bd1-adcc-53637b20099f", "name": "Московская областная Дума", "address": "PRAVIT_MO_O~MEDOGU"},
+    "apparat_rf": {"guid": "6d8c1ef5-a5ea-4dd9-a97d-5ee80f0663b1", "name": "Аппарат Правительства РФ", "address": "WH-MEDO~APRF"},
+    "minsport": {"guid": "6710b92a-e148-4363-8a6f-1aa0eb18936c", "name": "Минспорт России", "address": "M_MSPORT_S~MEDOGU"},
+    "minenergo": {"guid": "d8935694-1c45-4ed6-b101-52e306f4239b", "name": "Минэнерго России", "address": "M_ENERG_S~MEDOGU"},
+    "tyumen": {"guid": "d9d3138f-a665-44e5-801e-3e9732cf62f1", "name": "Тюменская область", "address": "TUMEN_S~MEDOGU"},
+    "mincifry": {"guid": "1d04ca3e-df1a-0cb4-c325-6ef4003ca2ab", "name": "Минцифры России", "address": "M_MINSV_D~MEDOGU"}
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "description": "2.7.1: перенаправление обращения гражданина по компетенции (CardInfo.txt)",
+  "format": "2.7.1",
+  "type": "citizen_appeal",
+  "name": "Обращение гражданина",
+  "from": "pravit_mo",
+  "to": ["tyumen"],
+  "citizen": {
+    "last_name": "Илларионов", "first_name": "Андрей", "middle_name": "Иванович",
+    "email": "test@example.ru",
+    "number": "029-ОГ/И", "date": "today",
+    "address": {"Region": "Нижегородская область", "Town": "г. Первомайск", "Comment": "ул. Северная, д. 1"},
+    "rubrics": ["0003.0009.0100.0761"]
+  },
+  "document": {
+    "reg_number": "033",
+    "signer": {"post": "Губернатор", "name": "Босов Павел Владимирович"}
+  }
+}

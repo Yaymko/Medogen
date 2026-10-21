@@ -1,0 +1,10 @@
+{
+  "description": "3.0: обращение гражданина (данные автора — enclosure_cardinfo.txt, см. README)",
+  "format": "3.0",
+  "type": "citizen_appeal",
+  "name": "Обращение гражданина",
+  "from": "pravit_mo",
+  "to": ["tyumen"],
+  "citizen": {"last_name": "Илларионов", "first_name": "Андрей", "middle_name": "Иванович",
+              "email": "test@example.ru", "address": {"Region": "Нижегородская область"}}
+}

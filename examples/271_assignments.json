@@ -1,0 +1,16 @@
+{
+  "description": "2.7.1 с цифровыми поручениями: выдача и все события по ходу контроля (digital.xml в приложении 101)",
+  "defaults": {"format": "2.7.1", "type": "assignment"},
+  "packages": [
+    {"name": "issue", "from": "apparat_rf", "to": ["minsport", "minenergo"],
+     "document": {"reg_number": "150", "signer": {"post": "Заместитель Председателя Правительства Российской Федерации", "name": "Чернышенко Дмитрий Николаевич"}},
+     "assignment": {"event": "issue", "items": [
+       {"number": "5", "text": "Проработать вопрос и направить предложения в Аппарат Правительства РФ.", "deadline": "today+90", "executor": "minsport", "coexecutors": ["minenergo"]},
+       {"number": "10", "text": "Провести сопутствующие мероприятия.", "deadline": "today+120", "executor": "minsport"}
+     ]}},
+    {"name": "change_deadline", "based_on": "@issue", "assignment": {"event": "change_deadline", "new_deadline": "today+150"}},
+    {"name": "return", "based_on": "@issue", "assignment": {"event": "return", "remarks": "Дополнить сведениями по подведомственным организациям.", "fix_deadline": "today+30"}},
+    {"name": "accept", "based_on": "@issue", "assignment": {"event": "accept"}},
+    {"name": "stop", "based_on": "@issue", "assignment": {"event": "stop"}}
+  ]
+}

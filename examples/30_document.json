@@ -1,0 +1,15 @@
+{
+  "description": "3.0: ТК «Документ в электронном виде» (TC00000002) без digital.xml и с digital.xml",
+  "defaults": {"format": "3.0", "type": "document", "from": "pravit_mo", "to": ["mo_duma"]},
+  "packages": [
+    {"name": "ДЭВ", "document": {
+      "annotation": "О проведении мероприятий", "reg_number": "П-МО-30",
+      "signer": {"post": "Заместитель Председателя Правительства Московской области", "name": "Антонов Сергей Анатольевич", "id": "123-456-789 00"},
+      "executor": {"id": "3", "post": "Специалист контроля качества", "name": "Иванов Иван Иванович", "phone": "+7 (495) 981-88-99"},
+      "attachments": [{"description": "План мероприятий", "pages": 2, "signed": true}]}},
+    {"name": "ДЭВ с digital (ДСП)", "with_digital": true, "document": {
+      "annotation": "О проведении мероприятий", "classification": "DC00000001", "reg_number": "П-МО-96",
+      "signer": {"post": "Заместитель Председателя Правительства Московской области", "name": "Антонов Сергей Анатольевич"},
+      "links": [{"uid": "608debf4-938d-4127-a7a0-44b6716d37ab", "org": "pravit_mo", "number": "39", "date": "2025-06-26"}]}}
+  ]
+}

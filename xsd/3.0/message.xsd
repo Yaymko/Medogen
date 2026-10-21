@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Схема файла паспорта электронного сообщения -->
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            xmlns="urn:IEDMS:MESSAGE:3.0"
+  targetNamespace="urn:IEDMS:MESSAGE:3.0"
+  elementFormDefault="qualified" attributeFormDefault="qualified"
+  version="3.0">
+
+  <!-- Корневой элемент паспорта электронного сообщения -->
+  <xsd:element name="message">
+    <xsd:complexType>
+      <xsd:sequence>
+        <!-- Заголовок сообщения -->
+        <xsd:element name="header">
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="source" type="abonentType"/>
+              <xsd:element name="created" type="dateTimeZone"/>
+              <xsd:element name="timeLimit" type="xsd:positiveInteger" minOccurs="0" default="72"/>
+            </xsd:sequence>
+            <xsd:attribute name="msgUid" type="strUUID" use="required"/>
+          </xsd:complexType>
+        </xsd:element>
+        <!-- Транспортный контейнер или квитанция --> 
+        <xsd:element name="payload">
+          <xsd:complexType>
+            <xsd:choice>
+              <xsd:element name="container" type="containerType"/>
+              <xsd:element name="receipt" type="receiptType"/>
+            </xsd:choice>
+          </xsd:complexType>
+        </xsd:element>
+        <!-- Указатель рассылки (список адресатов сообщения) -->
+        <xsd:element name="receivers" type="receiversType"/>
+      </xsd:sequence>
+    </xsd:complexType>
+  </xsd:element>
+
+  <!--ПРИКЛАДНЫЕ ТИПЫ-->
+  <xsd:complexType name="containerType">
+    <xsd:sequence>
+      <xsd:element name="type" type="referenceValue"/>
+      <xsd:element name="file">
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:normalizedString">
+            <xsd:pattern value="[a-z0-9_\-\.]{1,60}\.edc\.zip"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="secure" type="xsd:boolean" use="required"/>
+  </xsd:complexType>
+
+  <xsd:complexType name="receiptType">
+    <xsd:sequence maxOccurs="unbounded">
+      <xsd:choice>
+        <xsd:element name="resultAccept">
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="onReceivers" type="receiversType" minOccurs="0"/>
+            </xsd:sequence>
+          </xsd:complexType>
+        </xsd:element>
+        <xsd:element name="resultReject">
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="onReceivers" type="receiversType" minOccurs="0"/>
+              <xsd:element name="error" maxOccurs="unbounded">
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="reason" type="referenceValue"/>
+                    <xsd:element name="comment" type="shortText" minOccurs="0"/>
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+            </xsd:sequence>
+          </xsd:complexType>
+        </xsd:element>
+      </xsd:choice>
+    </xsd:sequence>
+    <xsd:attribute name="onMsgUid" type="strUUID" use="required"/>
+  </xsd:complexType>
+
+  <xsd:complexType name="receiversType">
+    <xsd:sequence>
+      <xsd:element name="receiver" type="abonentType" maxOccurs="unbounded"/>
+    </xsd:sequence>
+  </xsd:complexType>
+
+  <xsd:complexType name="abonentType">
+    <xsd:simpleContent>
+      <xsd:extension base="stringValue">
+        <xsd:attribute name="uid" type="strUUID" use="required"/>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+
+  <!--БАЗОВЫЕ ТИПЫ-->
+  <xsd:simpleType name="strUUID">
+    <xsd:restriction base="xsd:token">
+      <xsd:pattern
+        value="[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="dateTimeZone">
+    <xsd:restriction base="xsd:dateTime">
+      <xsd:pattern value="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+|-]\d{2}:\d{2}"/>
+      <xsd:minInclusive value="1900-01-01T00:00:00"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="dateDocument">
+    <xsd:restriction base="xsd:date">
+      <xsd:pattern value="\d{4}-\d{2}-\d{2}"/>
+      <xsd:minInclusive value="1900-01-01"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="shortText">
+    <xsd:restriction base="xsd:string">
+      <xsd:maxLength value="4000"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="stringValue">
+    <xsd:restriction base="xsd:normalizedString">
+      <xsd:minLength value="1"/>
+      <xsd:maxLength value="511"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+  <xsd:simpleType name="identityValue">
+    <xsd:restriction base="xsd:token">
+      <xsd:minLength value="1"/>
+      <xsd:maxLength value="127"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
+  <xsd:complexType name="referenceValue">
+    <xsd:simpleContent>
+      <xsd:extension base="stringValue">
+        <xsd:attribute name="id" type="identityValue" use="required"/>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+</xsd:schema>

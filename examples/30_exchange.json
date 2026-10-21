@@ -1,0 +1,15 @@
+{
+  "description": "3.0: документ и ответы — квитанции (прием/отказ) и уведомления о регистрации/отказе",
+  "defaults": {"format": "3.0"},
+  "packages": [
+    {"name": "doc", "type": "document", "with_digital": true, "from": "pravit_mo", "to": ["mo_duma"],
+     "document": {"annotation": "О согласовании проекта", "reg_number": "П-200"}},
+    {"name": "receipt_ok", "type": "receipt", "reply_to": "@doc", "receipt": {"accepted": true}},
+    {"name": "receipt_reject", "type": "receipt", "reply_to": "@doc",
+     "receipt": {"accepted": false, "reasons": [{"id": "102", "comment": "passport.xml не соответствует схеме"}]}},
+    {"name": "registered", "type": "notification", "reply_to": "@doc",
+     "notification": {"kind": "registered", "number": "ВХ-777", "date": "today"}},
+    {"name": "refused", "type": "notification", "reply_to": "@doc",
+     "notification": {"kind": "refused", "reasons": ["205"], "comment": "Вопрос не относится к компетенции"}}
+  ]
+}

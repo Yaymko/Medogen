@@ -1,0 +1,15 @@
+# результаты сборки и загрузки интерфейса
+out/
+# полный справочник ГАС (~14 МБ) загружается командой import-gas или в интерфейсе
+gas/gas.json
+# стенды конкретных контуров: в репозитории только пример
+orgs/*.json
+!orgs/default.json
+__pycache__/
+*.pyc
+.venv/
+venv/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

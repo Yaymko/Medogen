@@ -1,0 +1,1151 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Генератор МЭДО</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --panel2: #f8f9fb; --line: #dfe3e8; --text: #1d232b;
+  --muted: #667085; --accent: #2457c5; --accent-weak: #e8eefb; --ok: #1a7f4b; --ok-weak: #e6f4ec;
+  --err: #b42318; --err-weak: #fdecea; --warn: #9a6200; --warn-weak: #fff4dc; --code: #f3f4f6;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171c; --panel: #1c2027; --panel2: #222731; --line: #313844; --text: #e6e9ef;
+    --muted: #98a2b3; --accent: #6d9bff; --accent-weak: #1f2b45; --ok: #4cc38a; --ok-weak: #15301f;
+    --err: #ff7b72; --err-weak: #3a1d1b; --warn: #f0b44c; --warn-weak: #36290f; --code: #171a20;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+.bar { max-width: 1400px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.logo { font-weight: 700; font-size: 16px; letter-spacing: .2px; }
+.logo small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+nav { display: flex; gap: 4px; }
+nav button { border: 0; background: none; padding: 7px 12px; border-radius: 6px; color: var(--muted); font: inherit; cursor: pointer; }
+nav button.on { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+.spacer { flex: 1; }
+main { max-width: 1400px; margin: 0 auto; padding: 16px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px; }
+.card h2 { font-size: 15px; margin: 0 0 12px; }
+.card h3 { font-size: 13px; margin: 18px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.sticky { position: sticky; top: 70px; }
+@media (max-width: 1000px) { header { position: static; } .sticky { position: static; } }
+label.f { display: block; margin-bottom: 10px; }
+label.f > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+input[type=text], input[type=date], input[type=number], input:not([type]), select, textarea {
+  width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel); color: var(--text); font: inherit; }
+textarea { min-height: 60px; resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-weak); border-color: var(--accent); }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.row > label.f { margin-bottom: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 6px 14px; font: inherit; cursor: pointer; color: var(--text); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--accent); color: #fff; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px; cursor: pointer; background: var(--panel); text-align: left; font: inherit; color: var(--text); }
+.tile b { display: block; font-size: 13px; }
+.tile span { font-size: 12px; color: var(--muted); }
+.tile.on { border-color: var(--accent); background: var(--accent-weak); }
+.tile:disabled { opacity: .45; cursor: not-allowed; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 7px 13px; border-radius: 6px; font: inherit; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+a.btn { text-decoration: none; display: inline-block; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.small { padding: 3px 8px; font-size: 12px; }
+.btn.danger { color: var(--err); }
+.btn:disabled { opacity: .5; cursor: default; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.check { display: flex; gap: 7px; align-items: flex-start; margin: 6px 0; cursor: pointer; }
+.check input { margin-top: 3px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.mono { font-family: Consolas, "SF Mono", Menlo, monospace; font-size: 12px; }
+.gas-pick { position: relative; }
+.gas-res { position: absolute; z-index: 30; left: 0; right: 0; top: 100%; margin-top: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 14px rgba(16,24,40,.15); max-height: 320px; overflow: auto; }
+.gas-item { padding: 6px 9px; cursor: pointer; border-bottom: 1px solid var(--line); }
+.gas-item:hover { background: var(--accent-weak); }
+.pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.pill.ok { background: var(--ok-weak); color: var(--ok); border-color: transparent; }
+.pill.err { background: var(--err-weak); color: var(--err); border-color: transparent; }
+.pill.acc { background: var(--accent-weak); color: var(--accent); border-color: transparent; }
+.msg { padding: 9px 12px; border-radius: 7px; margin: 8px 0; }
+.msg.ok { background: var(--ok-weak); color: var(--ok); }
+.msg.err { background: var(--err-weak); color: var(--err); }
+.msg.warn { background: var(--warn-weak); color: var(--warn); }
+.msg ul { margin: 4px 0 0; padding-left: 18px; }
+.orglist { max-height: 210px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: var(--panel); }
+.orglist .check { margin: 3px 0; }
+.bad, input.bad, select.bad, textarea.bad, .orglist.bad { border-color: var(--err) !important; background: var(--err-weak) !important; }
+.req { color: var(--err); margin-left: 2px; }
+.errlist li { cursor: pointer; text-decoration: underline dotted; }
+.box { border: 1px dashed var(--line); border-radius: 8px; padding: 10px; background: var(--panel2); margin-bottom: 10px; }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; background: var(--panel2); }
+.item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--panel2); }
+tr.sel td { background: var(--accent-weak); }
+.kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 10px; margin: 8px 0; }
+.kv > div:nth-child(odd) { color: var(--muted); font-size: 12px; padding-top: 1px; }
+.kv > div { min-width: 0; overflow-wrap: anywhere; }
+.copy { cursor: pointer; border-bottom: 1px dotted var(--muted); }
+.files { list-style: none; padding: 0; margin: 6px 0; }
+.files li { padding: 3px 0; }
+.files ul { list-style: none; padding-left: 18px; margin: 2px 0; }
+.files a { color: var(--accent); cursor: pointer; text-decoration: none; }
+.files a:hover { text-decoration: underline; }
+.empty { color: var(--muted); padding: 30px 10px; text-align: center; }
+dialog { border: 1px solid var(--line); border-radius: 10px; padding: 0; width: min(1000px, 94vw); background: var(--panel); color: var(--text); }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+.dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); gap: 10px; }
+pre.view { margin: 0; padding: 14px; max-height: 72vh; overflow: auto; background: var(--code); font: 12px/1.45 Consolas, "SF Mono", Menlo, monospace; white-space: pre-wrap; word-break: break-all; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 7px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; }
+.toast.on { opacity: .95; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.filters > * { width: auto; }
+.filters input { min-width: 220px; flex: 1; }
+details summary { cursor: pointer; color: var(--muted); margin: 8px 0; }
+.hint { font-size: 12px; color: var(--muted); margin: -4px 0 10px; }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: s .7s linear infinite; vertical-align: -2px; }
+@keyframes s { to { transform: rotate(360deg); } }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="logo">Генератор МЭДО<small>2.7.1 · 3.0</small></div>
+    <nav id="nav">
+      <button data-tab="create" class="on">Создать пакет</button>
+      <button data-tab="packages">Пакеты</button>
+      <button data-tab="scenarios">Сценарии</button>
+      <button data-tab="orgs">Организации</button>
+    </nav>
+    <div class="spacer"></div>
+    <label class="small muted" for="stand">Стенд</label>
+    <select id="stand" style="width:auto;min-width:180px;max-width:320px"></select>
+    <span id="xsd" class="pill"></span>
+  </div>
+</header>
+<main>
+  <section id="tab-create"></section>
+  <section id="tab-packages" class="hidden"></section>
+  <section id="tab-scenarios" class="hidden"></section>
+  <section id="tab-orgs" class="hidden"></section>
+</main>
+
+<dialog id="viewer">
+  <div class="dlg-head"><b id="viewer-title"></b>
+    <div class="actions"><a id="viewer-dl" class="btn small">Скачать файл</a>
+      <button class="btn small" onclick="copyText(document.getElementById('viewer-text').textContent)">Копировать</button>
+      <button class="btn small" onclick="document.getElementById('viewer').close()">Закрыть</button></div>
+  </div>
+  <pre class="view" id="viewer-text"></pre>
+</dialog>
+<dialog id="replies">
+  <div class="dlg-head"><b id="replies-title"></b>
+    <button class="btn small" onclick="document.getElementById('replies').close()">Закрыть</button></div>
+  <div id="replies-body" style="padding:14px 16px;max-height:78vh;overflow:auto"></div>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+// ---------- утилиты ----------
+const $ = (s, el = document) => el.querySelector(s);
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "style") el.style.cssText = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "value") el.value = v;
+    else if (k === "checked") el.checked = !!v;
+    else if (k === "html") el.innerHTML = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat(Infinity)) {
+    if (k === null || k === undefined || k === false) continue;
+    el.append(k instanceof Node ? k : document.createTextNode(String(k)));
+  }
+  return el;
+}
+async function api(path, body) {
+  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  const data = await r.json().catch(() => ({ error: "некорректный ответ сервера" }));
+  if (!r.ok || data.error && !("packages" in data)) throw new Error(data.error || r.statusText);
+  return data;
+}
+async function upload(file) {
+  const r = await fetch("/api/upload", { method: "POST", headers: { "X-Filename": encodeURIComponent(file.name) }, body: file });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error);
+  return data;
+}
+function toast(text) {
+  const t = $("#toast"); t.textContent = text; t.classList.add("on");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 1800);
+}
+function copyText(text) {
+  (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(
+    () => toast("Скопировано"),
+    () => { const ta = h("textarea", { value: text }); document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); toast("Скопировано"); });
+}
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("medogen." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("medogen." + k, JSON.stringify(v)); } catch {} },
+};
+function isoToday(add = 0) { const d = new Date(); d.setDate(d.getDate() + add); return d.toISOString().slice(0, 10); }
+function fmtSize(n) { return n < 1024 ? n + " Б" : n < 1048576 ? (n / 1024).toFixed(1) + " КБ" : (n / 1048576).toFixed(1) + " МБ"; }
+// путь в объекте состояния: get/set по "a.b.0.c"
+function getp(o, p) { return p.split(".").reduce((a, k) => a == null ? a : a[k], o); }
+function setp(o, p, v) { const ks = p.split("."); let a = o; ks.slice(0, -1).forEach((k, i) => { if (a[k] == null) a[k] = /^\d+$/.test(ks[i + 1]) ? [] : {}; a = a[k]; }); a[ks.at(-1)] = v; }
+
+// ---------- общие данные ----------
+let META = null, ORGS = { orgs: [] }, PACKAGES = [];
+const TYPE_HINT = {
+  document: "ТК ДЭВ, в 3.0 можно ТК ГосЭДО", gosedo: "TC00000007, только 3.0",
+  citizen_appeal: "CardInfo / enclosure_cardinfo", receipt: "Ответ на пакет",
+  notification: "Ответ на пакет", assignment: "digital.xml, события",
+};
+const NOTIF_30 = ["registered", "refused"];
+
+function orgName(guid) { const o = ORGS.orgs.find(o => o.guid === guid || o.key === guid) || GAS_PICKED[guid]; return o ? o.name : guid; }
+function orgOptions(value, allowEmpty) {
+  const gasOpt = value && !ORGS.orgs.some(o => o.key === value) && GAS_PICKED[value];
+  return [allowEmpty ? h("option", { value: "" }, allowEmpty) : null,
+    ...ORGS.orgs.map(o => h("option", { value: o.key, selected: o.key === value }, `${o.name}${o.key === ORGS.self ? " (своя)" : ""}`)),
+    gasOpt ? h("option", { value, selected: true }, `${gasOpt.name} (из ГАС)`) : null];
+}
+
+// ---------- справочник ГАС ----------
+// организации, выбранные из ГАС в форме: в сценарий уходит их GUID, адрес сервер берёт из gas\gas.json
+const GAS_PICKED = store.get("gas_picked", {});
+function rememberGas(o) { GAS_PICKED[o.guid] = o; store.set("gas_picked", GAS_PICKED); }
+function gasPicker(onPick, placeholder) {
+  let timer = null, seq = 0;
+  const res = h("div", { class: "gas-res hidden" });
+  const inp = h("input", { placeholder: placeholder || "Найти в справочнике ГАС: название, адрес МЭДО или GUID",
+    oninput: () => { clearTimeout(timer); timer = setTimeout(run, 200); }, onfocus: () => inp.value && run(),
+    onkeydown: e => { if (e.key === "Escape") res.classList.add("hidden"); } });
+  inp.addEventListener("blur", () => setTimeout(() => res.classList.add("hidden"), 200));
+  async function run() {
+    const q = inp.value.trim(), my = ++seq;
+    if (!q) { res.classList.add("hidden"); return; }
+    let r; try { r = await api("/api/gas?q=" + encodeURIComponent(q)); } catch (e) { return; }
+    if (my !== seq) return;
+    res.innerHTML = ""; res.classList.remove("hidden");
+    if (!r.items.length) res.append(h("div", { class: "muted small", style: "padding:6px 9px" },
+      r.total ? "Ничего не найдено" : "Справочник ГАС пуст: загрузите его на вкладке «Организации»"));
+    r.items.forEach(o => res.append(h("div", { class: "gas-item", onmousedown: e => e.preventDefault(),
+      onclick: () => { rememberGas(o); inp.value = ""; res.classList.add("hidden"); onPick(o); } },
+      h("div", {}, o.name, o.active === false ? h("span", { class: "pill err", style: "margin-left:6px" }, "неактивен") : null),
+      o.org ? h("div", { class: "small muted" }, o.org) : null,
+      h("div", { class: "small muted mono" }, (o.address || "адрес не указан") + " · " + o.guid))));
+    if (r.found > r.items.length) res.append(h("div", { class: "muted small", style: "padding:6px 9px" }, `и ещё ${r.found - r.items.length}, уточните запрос`));
+  }
+  return h("div", { class: "gas-pick" }, inp, res);
+}
+function typeTitle(p) {
+  if (p.type === "incoming") return "Входящий";
+  let t = META.types[p.type] || p.type;
+  if (p.type === "assignment" && p.event) t += ": " + (META.events[p.event] || p.event).toLowerCase();
+  return t;
+}
+
+// ---------- состояние формы ----------
+const S = store.get("form", null) || {};
+function resetForm(keep) {
+  const base = { format: keep?.format || "3.0", type: keep?.type || "document", from: "", to: [], reply: null,
+    subject: "", time_limit: "", message_file: "",
+    document: { annotation: "", reg_number: "", reg_date: "", kind: "DK00000000", classification: "DC00000000",
+      place: "DP00000077", pages: 1, signer_post: "", signer_name: "", executor_name: "", executor_phone: "",
+      attachments: [], pdf: null, include_pdf: false },
+    container: "dev", with_digital: false, notify_sent: false, need_registration: true, need_execution: false,
+    citizen: { last_name: "Иванов", first_name: "Иван", middle_name: "Иванович", email: "test@example.ru", phone: "",
+      number: "", date: "", region: "", town: "", comment: "", rubrics: "", appeal: null },
+    receipt: { accepted: true, error_code: 0, comment: "", reasons: ["101"] },
+    notification: { kind: "registered", number: "", date: "", reasons: ["203"], comment: "", text: "",
+      secretary: "", manager: "", executor: "", signatory: "", signatory_post: "", report_number: "", report_date: "",
+      publication_point: "" },
+    assignment: { event: "issue", author: "", items: [{ number: "1", text: "", deadline: isoToday(30), executor: "", coexecutors: [] }],
+      new_deadline: isoToday(60), remarks: "", fix_deadline: isoToday(14) },
+  };
+  Object.keys(S).forEach(k => delete S[k]);
+  Object.assign(S, base);
+}
+if (!S.document) resetForm();
+function save() { store.set("form", S); }
+
+function bind(path, attrs = {}, rerender) {
+  const v = getp(S, path);
+  const { tag = "input", options = [], ...rest } = attrs;
+  const el = h(tag, rest);
+  el.dataset.path = path;
+  if (tag === "select") options.forEach(o => el.append(o));
+  el.value = v ?? "";
+  el.addEventListener(tag === "select" ? "change" : "input", () => {
+    el.classList.remove("bad");
+    let val = el.value;
+    if (attrs.type === "number") val = val === "" ? "" : Number(val);
+    setp(S, path, val); save(); if (rerender) renderCreate();
+  });
+  return el;
+}
+function field(label, el, hint) {
+  const req = typeof label === "string" && label.endsWith(" *");
+  return h("label", { class: "f" }, h("span", {}, req ? label.slice(0, -2) : label, req ? h("span", { class: "req", title: "обязательное поле" }, "*") : null),
+    el, hint ? h("div", { class: "hint", style: "margin:3px 0 0" }, hint) : null);
+}
+function checkbox(path, label, rerender) {
+  const el = h("input", { type: "checkbox", checked: !!getp(S, path), onchange: () => { setp(S, path, el.checked); save(); if (rerender) renderCreate(); } });
+  return h("label", { class: "check" }, el, h("span", {}, label));
+}
+function fileInput(path, label, accept) {
+  const cur = getp(S, path);
+  const inp = h("input", { type: "file", accept, class: "hidden", onchange: async () => {
+    const f = inp.files[0]; if (!f) return;
+    try { const r = await upload(f); setp(S, path, { path: r.path, name: r.name }); save(); renderCreate(); }
+    catch (e) { toast("Ошибка загрузки: " + e.message); }
+  } });
+  return h("div", { class: "actions", style: "margin-bottom:10px" },
+    h("button", { class: "btn small", type: "button", onclick: () => inp.click() }, cur ? "Заменить файл" : label), inp,
+    cur ? h("span", { class: "small" }, "📎 " + cur.name) : h("span", { class: "small muted" }, "без файла создаётся PDF-заглушка"),
+    cur ? h("button", { class: "btn small danger", type: "button", onclick: () => { setp(S, path, null); save(); renderCreate(); } }, "Убрать") : null);
+}
+
+// ---------- вкладка «Создать пакет» ----------
+let LAST_RESULT = null, BUSY = false, FORM_ERRS = [];
+const replyDoc = () => S.type === "document" && !!S.reply_doc;
+const needsReply = () => ["receipt", "notification"].includes(S.type) || (S.type === "assignment" && S.assignment.event !== "issue");
+
+function renderCreate() {
+  const root = $("#tab-create"); root.innerHTML = "";
+  if (S.format === "2.7.1" && S.type === "gosedo") S.type = "document";
+  if (S.format === "3.0" && S.type === "notification" && !NOTIF_30.includes(S.notification.kind)) S.notification.kind = "registered";
+  const form = h("div", { class: "card" });
+
+  form.append(h("div", { class: "actions", style: "justify-content:space-between;margin-bottom:12px" },
+    h("div", { class: "actions" }, h("b", {}, "Формат"),
+      h("div", { class: "seg" }, ...["3.0", "2.7.1"].map(f => h("button", { type: "button", class: S.format === f ? "on" : "", onclick: () => { S.format = f; save(); renderCreate(); } }, f)))),
+    h("button", { class: "btn small", type: "button", onclick: () => { resetForm(S); LAST_RESULT = null; FORM_ERRS = []; save(); renderCreate(); } }, "Очистить форму")));
+
+  form.append(h("div", { class: "tiles" }, ...Object.entries(META.types).map(([k, t]) =>
+    h("button", { type: "button", class: "tile" + (S.type === k ? " on" : ""), disabled: k === "gosedo" && S.format !== "3.0",
+      onclick: () => { S.type = k; save(); renderCreate(); } }, h("b", {}, t), h("span", {}, TYPE_HINT[k])))));
+
+  if (S.type === "assignment") form.append(h("h3", {}, "Событие поручения"),
+    field("Событие", bind("assignment.event", { tag: "select", options: Object.entries(META.events).map(([k, v]) => h("option", { value: k }, v)) }, true)));
+
+  if (S.type === "document") form.append(h("div", { style: "margin-top:12px" },
+    checkbox("reply_doc", "Ответный документ на входящий пакет: отправитель и получатель из пакета, связь с исходным документом", true)));
+  if (needsReply() || replyDoc()) form.append(replySection());
+  form.append(partiesSection());
+
+  const t = S.type;
+  if (["document", "gosedo", "citizen_appeal", "assignment"].includes(t)) form.append(docSection());
+  if (t === "citizen_appeal") form.append(citizenSection());
+  if (t === "receipt") form.append(receiptSection());
+  if (t === "notification") form.append(notificationSection());
+  if (t === "assignment") form.append(assignmentSection());
+
+  const adv = h("details", {}, h("summary", {}, "Дополнительно: тема конверта, срок обработки, имя паспорта"),
+    h("div", { class: "row" },
+      field("Тема в envelope.ini", bind("subject", { placeholder: "Сообщение МЭДО" })),
+      S.format === "3.0" ? field("timeLimit, мин", bind("time_limit", { type: "number", placeholder: "240" })) : null,
+      field("Имя паспорта ЭС", bind("message_file", { placeholder: "message.xml" }))));
+  form.append(adv);
+
+  if (FORM_ERRS.length) FORM_ERRS = formErrors();  // после правок список сокращается
+  if (FORM_ERRS.length) form.append(h("div", { class: "msg err small", style: "margin-top:14px" },
+    h("b", {}, "Заполните обязательные поля:"),
+    h("ul", { class: "errlist" }, ...FORM_ERRS.map(e => h("li", { onclick: () => focusPath(e.path) }, e.msg)))));
+  form.append(h("div", { class: "small muted", style: "margin-top:10px" }, h("span", { class: "req" }, "*"),
+    " — обязательные поля. Пустые поля с подсказкой («авто», ФИО по умолчанию) заполняются генератором."));
+  const btn = h("button", { class: "btn primary", type: "button", disabled: BUSY, onclick: doBuild }, BUSY ? h("span", { class: "spin" }) : null, BUSY ? " Сборка…" : "Собрать пакет");
+  form.append(h("div", { class: "actions", style: "margin-top:14px" }, btn,
+    h("button", { class: "btn", type: "button", onclick: () => showJson() }, "Показать JSON сценария")));
+
+  const right = h("div", { class: "sticky" }, resultCard());
+  root.append(h("div", { class: "grid" }, form, right));
+  const bad = new Set(FORM_ERRS.map(e => e.path));
+  root.querySelectorAll("[data-path]").forEach(el => el.classList.toggle("bad", bad.has(el.dataset.path)));
+}
+function focusPath(path) {
+  const el = $(`#tab-create [data-path="${CSS.escape(path)}"]`);
+  if (!el) return;
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
+  if (el.focus) el.focus({ preventScroll: true });
+}
+
+function replySection() {
+  const box = h("div", {});
+  const isAssign = S.type === "assignment";
+  box.append(h("h3", {}, isAssign ? "Поручение, по которому событие" : "Ответ на пакет"));
+  const list = PACKAGES.filter(p => isAssign ? (p.type === "assignment" || p.type === "incoming") : true);
+  const sel = h("select", { "data-path": "reply", onchange: () => { pickReply(sel.value); } },
+    h("option", { value: "" }, list.length ? "— выберите пакет —" : "— пакетов пока нет —"),
+    ...list.map(p => h("option", { value: p.id, selected: S.reply?.id === p.id },
+      `${p.created} · ${p.format || "?"} · ${typeTitle(p)} · ${p.name || ""}${p.reg_number ? " №" + p.reg_number : ""}`)));
+  box.append(field(isAssign ? "Пакет выдачи поручения *" : "Исходный пакет *", sel));
+  const inp = h("input", { type: "file", accept: ".zip", class: "hidden", onchange: async () => {
+    const f = inp.files[0]; if (!f) return;
+    try { const u = await upload(f); const card = await api("/api/incoming", { upload: u.path }); await loadPackages(); pickReply(card.id); toast("Входящий пакет загружен"); }
+    catch (e) { toast("Ошибка: " + e.message); }
+  } });
+  const pathInp = h("input", { placeholder: "или путь к папке пакета, например D:\\МЭДО\\in\\пакет" });
+  box.append(h("div", { class: "actions", style: "margin-bottom:10px" },
+    h("button", { class: "btn small", type: "button", onclick: () => inp.click() }, "Загрузить входящий пакет (.zip)"), inp,
+    h("div", { style: "flex:1;min-width:220px" }, pathInp),
+    h("button", { class: "btn small", type: "button", onclick: async () => {
+      try { const card = await api("/api/incoming", { path: pathInp.value }); await loadPackages(); pickReply(card.id); toast("Пакет добавлен"); }
+      catch (e) { toast("Ошибка: " + e.message); } } }, "Взять из папки")));
+  const p = S.reply && PACKAGES.find(x => x.id === S.reply.id);
+  if (p) box.append(h("div", { class: "box small" },
+    h("div", { class: "kv", style: "margin:0" },
+      h("div", {}, "Пакет"), h("div", {}, `${typeTitle(p)}, ${p.format}`),
+      h("div", {}, "От"), h("div", {}, p.from?.name || "—"),
+      h("div", {}, "Кому"), h("div", {}, (p.to || []).map(o => o.name).join(", ") || "—"),
+      h("div", {}, "Документ"), h("div", {}, p.reg_number ? `№${p.reg_number} от ${p.reg_date || ""}` : "—"),
+      h("div", {}, "msgUid"), h("div", { class: "mono" }, p.msg_uid || "—"),
+      isAssign ? h("div", {}, "Процесс") : null, isAssign ? h("div", { class: "mono" }, p.process_uid || "—") : null),
+    h("div", { class: "muted", style: "margin-top:6px" }, isAssign
+      ? "Процесс, пункты и исполнители берутся из пакета выдачи."
+      : "Отправитель и получатель берутся из пакета (меняются местами), если не заданы ниже." +
+        (replyDoc() ? " В паспорт ТК добавляется связь «Связан с» с исходным документом, краткое содержание по умолчанию: «Ответ на № … от …»." : ""))));
+  else if (S.reply) S.reply = null;
+  return box;
+}
+function pickReply(id) {
+  const p = PACKAGES.find(x => x.id === id);
+  S.reply = p ? { id } : null;
+  if (p && p.format && p.format !== S.format) { S.format = p.format; toast("Формат переключён на " + p.format + " по исходному пакету"); }
+  save(); renderCreate();
+}
+
+function partiesSection() {
+  const box = h("div", {});
+  box.append(h("h3", {}, "Отправитель и получатели"));
+  const auto = (needsReply() || replyDoc()) && S.reply;
+  const fromSel = bind("from", { tag: "select", options: orgOptions(S.from, auto ? "— из исходного пакета —" : `— своя организация (${orgName(ORGS.self) || "не задана"}) —`) });
+  box.append(field("Отправитель", fromSel));
+  box.append(h("div", { style: "margin:-4px 0 10px" }, gasPicker(o => { S.from = o.guid; save(); renderCreate(); }, "…или выбрать отправителя из справочника ГАС")));
+  const filter = h("input", { placeholder: "Поиск организации", oninput: () => {
+    const q = filter.value.toLowerCase();
+    list.querySelectorAll("label").forEach(l => l.classList.toggle("hidden", !l.textContent.toLowerCase().includes(q)));
+  } });
+  const list = h("div", { class: "orglist", "data-path": "to" }, ...ORGS.orgs.map(o => {
+    const cb = h("input", { type: "checkbox", checked: S.to.includes(o.key), onchange: () => {
+      S.to = cb.checked ? [...S.to, o.key] : S.to.filter(k => k !== o.key); save(); toCount.textContent = countText(); } });
+    return h("label", { class: "check" }, cb, h("span", {}, o.name, h("span", { class: "muted small" }, "  " + o.guid)));
+  }), ...S.to.filter(k => !ORGS.orgs.some(o => o.key === k) && GAS_PICKED[k]).map(k => {
+    const o = GAS_PICKED[k];
+    const cb = h("input", { type: "checkbox", checked: true, onchange: () => { S.to = S.to.filter(x => x !== k); save(); renderCreate(); } });
+    return h("label", { class: "check" }, cb, h("span", {}, o.name, " ", h("span", { class: "pill acc" }, "ГАС"), h("span", { class: "muted small" }, "  " + (o.address || "") + "  " + o.guid)));
+  }));
+  const countText = () => S.to.length ? `Выбрано: ${S.to.length}` : (auto ? "Не выбрано — получатель из исходного пакета" :
+    S.type === "assignment" ? "Не выбрано — получатели: исполнители и соисполнители" : "Выберите хотя бы одного получателя");
+  const toCount = h("span", { class: "small muted" }, countText());
+  box.append(h("label", { class: "f" }, h("span", {}, "Получатели", auto || S.type === "assignment" ? null : h("span", { class: "req" }, "*")), filter, h("div", { style: "height:6px" }), list), h("div", { class: "hint", style: "margin-top:-4px" }, toCount));
+  box.append(h("div", { style: "margin:6px 0 10px" }, gasPicker(o => { if (!S.to.includes(o.guid) && !ORGS.orgs.some(x => x.guid === o.guid && S.to.includes(x.key))) S.to.push(o.guid); save(); renderCreate(); }, "+ получатель из справочника ГАС")));
+  if (!ORGS.orgs.length) box.append(h("div", { class: "msg warn" }, "В справочнике стенда нет организаций. Добавьте их на вкладке «Организации»."));
+  return box;
+}
+
+function docSection() {
+  const d = "document.";
+  const box = h("div", {});
+  box.append(h("h3", {}, S.type === "assignment" ? "Документ поручения" : "Документ"));
+  if (S.type === "document" && S.format === "3.0") {
+    box.append(h("div", { class: "actions", style: "margin-bottom:10px" }, h("span", { class: "small muted" }, "Контейнер"),
+      h("div", { class: "seg" }, ...[["dev", "ТК ДЭВ"], ["gosedo", "ТК ГосЭДО"]].map(([k, t]) =>
+        h("button", { type: "button", class: S.container === k ? "on" : "", onclick: () => { S.container = k; save(); renderCreate(); } }, t)))));
+    if (S.container === "dev") box.append(checkbox("with_digital", "Добавить digital.xml с событием «Регистрация документа»"));
+  }
+  if (S.type === "assignment" && S.format === "3.0") {
+    box.append(h("div", { class: "actions", style: "margin-bottom:10px" }, h("span", { class: "small muted" }, "Контейнер"),
+      h("div", { class: "seg" }, ...[["dev", "ТК ДЭВ"], ["gosedo", "ТК ГосЭДО"]].map(([k, t]) =>
+        h("button", { type: "button", class: S.container === k ? "on" : "", onclick: () => { S.container = k; save(); renderCreate(); } }, t)))));
+  }
+  if ((S.type === "document" || S.type === "citizen_appeal") && S.format === "2.7.1") {
+    box.append(checkbox("notify_sent", "Уведомление «Поставлен на контроль» в паспорте ЭС", true));
+    if (S.notify_sent) box.append(h("div", { style: "padding-left:22px" }, checkbox("need_registration", "Требуется регистрация"), checkbox("need_execution", "Требуется исполнение")));
+  }
+  box.append(field("Краткое содержание", bind(d + "annotation", { placeholder: S.type === "assignment" ? "по умолчанию: название события" : "Тестовый документ" })));
+  box.append(h("div", { class: "row" },
+    field("Рег. номер", bind(d + "reg_number", { placeholder: "авто" })),
+    field("Дата регистрации", bind(d + "reg_date", { type: "date" })),
+    field("Страниц в заглушке", bind(d + "pages", { type: "number", min: 1 }))));
+  const kinds = { ...META.kinds, __custom: "Другой код…" };
+  box.append(h("div", { class: "row" },
+    field("Вид документа", bind(d + "kind", { tag: "select", options: Object.entries(kinds).map(([k, v]) => h("option", { value: k }, k === "__custom" ? v : `${k} · ${v}`)) }, true)),
+    field("Гриф", bind(d + "classification", { tag: "select", options: Object.entries(META.classes).map(([k, v]) => h("option", { value: k }, v)) })),
+    field("Место", bind(d + "place", { tag: "select", options: Object.entries(META.places).map(([k, v]) => h("option", { value: k }, v)) }))));
+  if (S.document.kind === "__custom") box.append(h("div", { class: "row" },
+    field("Код вида (DK…) *", bind(d + "kind_id", { placeholder: "DK00000001" })), field("Наименование вида *", bind(d + "kind_name"))));
+  box.append(h("div", { class: "row" },
+    field("Подписант, должность", bind(d + "signer_post", { placeholder: "Руководитель" })),
+    field("Подписант, ФИО", bind(d + "signer_name", { placeholder: "Иванов Иван Иванович" }))));
+  box.append(h("div", { class: "row" },
+    field("Исполнитель, ФИО", bind(d + "executor_name", { placeholder: "Петров Петр Петрович" })),
+    field("Исполнитель, телефон", bind(d + "executor_phone", { placeholder: "+7 (495) 000-00-00" }))));
+  box.append(h("div", { class: "small muted", style: "margin-bottom:4px" }, "Текст документа (PDF)"), fileInput(d + "pdf", "Загрузить свой PDF", ".pdf"));
+  if (S.format === "3.0" && (S.type === "gosedo" || S.container === "gosedo")) box.append(checkbox(d + "include_pdf", "Положить текст документа как enclosure_document.pdf"));
+
+  box.append(h("div", { class: "actions", style: "justify-content:space-between;margin:8px 0" }, h("b", { class: "small" }, "Приложения"),
+    h("button", { class: "btn small", type: "button", onclick: () => { S.document.attachments.push({ description: "", pages: 1, file: null, signed: false }); save(); renderCreate(); } }, "+ Приложение")));
+  S.document.attachments.forEach((a, i) => {
+    const p = `${d}attachments.${i}.`;
+    box.append(h("div", { class: "item" },
+      h("div", { class: "item-head" }, h("b", { class: "small" }, `Приложение ${i + 1}`),
+        h("button", { class: "btn small danger", type: "button", onclick: () => { S.document.attachments.splice(i, 1); save(); renderCreate(); } }, "Удалить")),
+      h("div", { class: "row" }, field("Описание", bind(p + "description", { placeholder: "Приложение" })), a.file ? null : field("Страниц", bind(p + "pages", { type: "number", min: 1 }))),
+      fileInput(p + "file", "Загрузить файл"), checkbox(p + "signed", "Подписать отдельной ЭП (.p7s)")));
+  });
+  return box;
+}
+
+function citizenSection() {
+  const c = "citizen.";
+  return h("div", {}, h("h3", {}, "Автор обращения"),
+    h("div", { class: "row" }, field("Фамилия *", bind(c + "last_name")), field("Имя *", bind(c + "first_name")), field("Отчество", bind(c + "middle_name"))),
+    h("div", { class: "row" }, field("E-mail", bind(c + "email")), field("Телефон", bind(c + "phone"))),
+    h("div", { class: "row" }, field("Номер обращения", bind(c + "number", { placeholder: "1-ОГ" })), field("Дата обращения", bind(c + "date", { type: "date" }))),
+    h("div", { class: "row" }, field("Регион", bind(c + "region")), field("Населённый пункт", bind(c + "town"))),
+    field("Адрес (комментарий)", bind(c + "comment", { placeholder: "ул. Ленина, д. 1, кв. 1" })),
+    field("Рубрики (коды через запятую)", bind(c + "rubrics", { placeholder: "0002.0006.0065.0258" })),
+    h("div", { class: "small muted", style: "margin-bottom:4px" }, "Файл обращения"), fileInput(c + "appeal", "Загрузить файл обращения"),
+    S.format === "3.0" ? h("div", { class: "msg warn small" }, "В 3.0 нет CardInfo.txt: данные автора вкладываются как enclosure_cardinfo.txt (допущение, см. README).") : null);
+}
+
+function reasonsBox(path, catalog) {
+  const cur = getp(S, path) || [];
+  return h("div", { class: "orglist", style: "max-height:240px", "data-path": path }, ...Object.entries(catalog).map(([k, v]) => {
+    const cb = h("input", { type: "checkbox", checked: cur.includes(k), onchange: () => {
+      const now = getp(S, path) || []; setp(S, path, cb.checked ? [...now, k] : now.filter(x => x !== k)); save(); } });
+    return h("label", { class: "check" }, cb, h("span", {}, h("b", { class: "mono" }, k), " ", v));
+  }));
+}
+
+function receiptSection() {
+  const box = h("div", {}, h("h3", {}, "Квитанция"));
+  box.append(h("div", { class: "seg", style: "margin-bottom:10px" },
+    ...[[true, "Принято"], [false, "Отказ в приёме"]].map(([v, t]) => h("button", { type: "button", class: S.receipt.accepted === v ? "on" : "", onclick: () => { S.receipt.accepted = v; save(); renderCreate(); } }, t))));
+  if (!S.receipt.accepted) {
+    if (S.format === "2.7.1") box.append(field("Код ошибки (errorCode) *", bind("receipt.error_code", { type: "number" })));
+    else box.append(field("Причины отказа (приказ 611/96) *", reasonsBox("receipt.reasons", META.receipt_reasons)));
+  }
+  box.append(field("Комментарий", bind("receipt.comment", { tag: "textarea" })));
+  return box;
+}
+
+function notificationSection() {
+  const n = "notification.";
+  const kinds = Object.entries(META.notifications).filter(([k]) => S.format === "2.7.1" ? k !== "sent" : NOTIF_30.includes(k));
+  const box = h("div", {}, h("h3", {}, "Уведомление"),
+    field("Вид уведомления", bind(n + "kind", { tag: "select", options: kinds.map(([k, v]) => h("option", { value: k }, v)) }, true)));
+  const k = S.notification.kind;
+  if (k === "registered") box.append(h("div", { class: "row" }, field("Входящий номер", bind(n + "number", { placeholder: "авто" })), field("Дата регистрации", bind(n + "date", { type: "date" }))));
+  if (k === "refused") box.append(field("Причины отказа (Cat01-004-00005) *", reasonsBox(n + "reasons", META.refusal_reasons)));
+  if (k === "executor_assigned") box.append(h("div", { class: "row" }, field("Секретарь", bind(n + "secretary", { placeholder: "Секретарь" })), field("Руководитель", bind(n + "manager", { placeholder: "Руководитель" })), field("Исполнитель", bind(n + "executor", { placeholder: "Исполнитель" }))));
+  if (k === "report_prepared") box.append(h("div", { class: "row" }, field("Подписант доклада", bind(n + "signatory", { placeholder: "Подписант" })), field("Должность", bind(n + "signatory_post", { placeholder: "Руководитель" }))));
+  if (k === "report_sent") box.append(h("div", { class: "row" }, field("Номер доклада", bind(n + "report_number", { placeholder: "авто" })), field("Дата доклада", bind(n + "report_date", { type: "date" }))));
+  if (k === "course_changed") box.append(field("Текст", bind(n + "text", { tag: "textarea", placeholder: "Документ находится на исполнении" })));
+  if (k === "published") box.append(h("div", { class: "row" }, field("Номер", bind(n + "number")), field("Место опубликования", bind(n + "publication_point", { placeholder: "Официальный интернет-портал правовой информации" }))));
+  box.append(field("Комментарий", bind(n + "comment", { tag: "textarea" })));
+  if (S.format === "3.0") box.append(h("div", { class: "msg warn small" }, "В 3.0 уведомление уходит как ТК ГосЭДО с событием Exc01-004-00001 (коды событий — допущение, см. README)."));
+  return box;
+}
+
+function assignmentSection() {
+  const a = S.assignment, box = h("div", {});
+  if (a.event === "issue") {
+    box.append(h("h3", {}, "Пункты поручения"), field("Автор поручения (ФИО)", bind("assignment.author", { placeholder: "по умолчанию — подписант" })));
+    a.items.forEach((it, i) => {
+      const p = `assignment.items.${i}.`;
+      const coGas = it.coexecutors.filter(k => !ORGS.orgs.some(o => o.key === k) && GAS_PICKED[k]);
+      const co = h("select", { multiple: true, size: Math.min(6, Math.max(3, ORGS.orgs.length + coGas.length)), onchange: () => { it.coexecutors = [...co.selectedOptions].map(o => o.value); save(); } },
+        ...ORGS.orgs.map(o => h("option", { value: o.key, selected: it.coexecutors.includes(o.key) }, o.name)),
+        ...coGas.map(k => h("option", { value: k, selected: true }, `${GAS_PICKED[k].name} (из ГАС)`)));
+      box.append(h("div", { class: "item" },
+        h("div", { class: "item-head" }, h("b", { class: "small" }, `Пункт ${it.number || i + 1}`),
+          a.items.length > 1 ? h("button", { class: "btn small danger", type: "button", onclick: () => { a.items.splice(i, 1); save(); renderCreate(); } }, "Удалить") : null),
+        h("div", { class: "row" }, field("Номер пункта", bind(p + "number")), field("Срок исполнения", bind(p + "deadline", { type: "date" }))),
+        field("Текст пункта", bind(p + "text", { tag: "textarea", placeholder: "Проработать вопрос и представить предложения." })),
+        h("div", { class: "row" }, field("Исполнитель", bind(p + "executor", { tag: "select", options: orgOptions(it.executor, "— первый получатель —") })),
+          field("Соисполнители (Ctrl+клик)", co)),
+        h("div", { class: "row" },
+          gasPicker(o => { it.executor = o.guid; save(); renderCreate(); }, "Исполнитель из справочника ГАС"),
+          gasPicker(o => { if (!it.coexecutors.includes(o.guid)) it.coexecutors.push(o.guid); save(); renderCreate(); }, "+ соисполнитель из справочника ГАС"))));
+    });
+    box.append(h("button", { class: "btn small", type: "button", onclick: () => { a.items.push({ number: String(a.items.length + 1), text: "", deadline: isoToday(30), executor: "", coexecutors: [] }); save(); renderCreate(); } }, "+ Пункт"));
+  } else {
+    box.append(h("h3", {}, "Параметры события"));
+    if (a.event === "change_deadline") box.append(field("Новый срок", bind("assignment.new_deadline", { type: "date" })));
+    if (a.event === "return") box.append(field("Замечания", bind("assignment.remarks", { tag: "textarea", placeholder: "Доклад требует доработки." })), field("Срок доработки", bind("assignment.fix_deadline", { type: "date" })));
+    if (a.event === "accept" || a.event === "stop") box.append(h("div", { class: "muted small" }, "Дополнительных полей нет."));
+    if (S.format === "2.7.1") box.append(h("div", { class: "hint", style: "margin-top:6px" }, "В 2.7.1 событие передаётся digital.xml в приложении 101."));
+  }
+  return box;
+}
+
+// ---------- сборка сценария из формы ----------
+function nz(v) { return v === "" || v === null || v === undefined ? undefined : v; }
+function clean(o) {
+  if (Array.isArray(o)) return o.map(clean);
+  if (o && typeof o === "object") { const r = {}; for (const [k, v] of Object.entries(o)) { const c = clean(v); if (c !== undefined && !(typeof c === "object" && !Array.isArray(c) && !Object.keys(c).length)) r[k] = c; } return r; }
+  return nz(o);
+}
+function buildSpec() {
+  const t = S.type, spec = { format: S.format, type: t, name: META.types[t] };
+  if (S.from) spec.from = S.from;
+  if (S.to.length) spec.to = [...S.to];
+  if (needsReply() || replyDoc()) {
+    if (!S.reply) throw new Error(S.type === "assignment" ? "Выберите пакет выдачи поручения" : "Выберите исходный пакет для ответа");
+    spec[t === "assignment" ? "based_on" : "reply_to"] = "ui:" + S.reply.id;
+  }
+  if (!spec.to && !spec.reply_to && !spec.based_on && t !== "assignment") throw new Error("Выберите получателя");
+  spec.subject = nz(S.subject); spec.time_limit = nz(S.time_limit);
+  if (["document", "gosedo", "citizen_appeal", "assignment"].includes(t)) {
+    const d = S.document;
+    const doc = { annotation: nz(d.annotation), reg_number: nz(d.reg_number), reg_date: nz(d.reg_date), pages: nz(d.pages),
+      classification: d.classification, place: d.place, pdf: d.pdf?.path };
+    if (d.kind === "__custom") { if (!d.kind_id || !d.kind_name) throw new Error("Укажите код и наименование вида документа"); doc.kind = { id: d.kind_id, name: d.kind_name }; }
+    else if (!(t === "assignment" && d.kind === "DK00000000")) doc.kind = d.kind;
+    if (d.signer_post || d.signer_name) doc.signer = { post: nz(d.signer_post), name: nz(d.signer_name) };
+    if (d.executor_name || d.executor_phone) doc.executor = { name: nz(d.executor_name), phone: nz(d.executor_phone) };
+    doc.attachments = d.attachments.map(a => a.file ? { file: a.file.path, description: nz(a.description), signed: a.signed } : { description: nz(a.description) || "Приложение", pages: nz(a.pages), signed: a.signed });
+    if (d.include_pdf) doc.include_pdf = true;
+    spec.document = doc;
+    if (S.format === "3.0" && (t === "document" || t === "assignment")) spec.container = S.container;
+    if (t === "document" && S.format === "3.0" && S.container === "dev" && S.with_digital) spec.with_digital = true;
+    if ((t === "document" || t === "citizen_appeal") && S.format === "2.7.1" && S.notify_sent)
+      spec.notify_sent = { need_registration: S.need_registration, need_execution: S.need_execution };
+  }
+  if (t === "citizen_appeal") {
+    const c = S.citizen;
+    spec.citizen = { last_name: c.last_name, first_name: c.first_name, middle_name: c.middle_name, email: c.email, phone: c.phone,
+      number: c.number, date: c.date, appeal_file: c.appeal?.path,
+      address: { Region: c.region, Town: c.town, Comment: c.comment },
+      rubrics: c.rubrics ? c.rubrics.split(",").map(s => s.trim()).filter(Boolean) : undefined };
+  }
+  if (t === "receipt") {
+    const r = S.receipt; spec.receipt = { accepted: r.accepted, comment: nz(r.comment) };
+    if (!r.accepted) {
+      if (S.format === "2.7.1") spec.receipt.error_code = Number(r.error_code || 0);
+      else { if (!r.reasons.length) throw new Error("Отметьте хотя бы одну причину отказа"); spec.receipt.reasons = r.reasons.map(id => ({ id })); }
+    }
+  }
+  if (t === "notification") {
+    const n = S.notification, o = { kind: n.kind, comment: nz(n.comment) };
+    if (n.kind === "registered") Object.assign(o, { number: nz(n.number), date: nz(n.date) });
+    if (n.kind === "refused") { if (!n.reasons.length) throw new Error("Отметьте хотя бы одну причину отказа"); o.reasons = n.reasons; }
+    if (n.kind === "executor_assigned") { if (n.secretary) o.secretary = { person: n.secretary }; if (n.manager) o.manager = { person: n.manager }; if (n.executor) o.executor = { person: n.executor }; }
+    if (n.kind === "report_prepared" && (n.signatory || n.signatory_post)) o.signatory = { person: n.signatory || "Подписант", post: n.signatory_post || "Руководитель" };
+    if (n.kind === "report_sent") o.report = { number: nz(n.report_number), date: nz(n.report_date) };
+    if (n.kind === "course_changed") o.text = nz(n.text);
+    if (n.kind === "published") Object.assign(o, { number: nz(n.number), publication_point: nz(n.publication_point) });
+    spec.notification = o;
+  }
+  if (t === "assignment") {
+    const a = S.assignment, o = { event: a.event };
+    if (a.event === "issue") {
+      if (a.author) o.author = { name: a.author };
+      o.items = a.items.map(it => ({ number: nz(it.number), text: nz(it.text), deadline: nz(it.deadline), executor: nz(it.executor), coexecutors: it.coexecutors.length ? it.coexecutors : undefined }));
+      if (!spec.to && !o.items.some(it => it.executor)) throw new Error("Укажите получателей или исполнителя хотя бы одного пункта");
+    }
+    if (a.event === "change_deadline") o.new_deadline = nz(a.new_deadline);
+    if (a.event === "return") Object.assign(o, { remarks: nz(a.remarks), fix_deadline: nz(a.fix_deadline) });
+    spec.assignment = o;
+  }
+  const settings = {}; if (S.message_file) settings.message_file = S.message_file;
+  const scenario = clean({ settings, ...spec });
+  return scenario;
+}
+
+// Обязательные поля формы: то, что генератор не может подставить сам.
+function formErrors() {
+  const E = [], t = S.type, add = (path, msg) => E.push({ path, msg });
+  const okDate = v => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const posInt = v => v === "" || v == null || (Number.isInteger(Number(v)) && Number(v) >= 1);
+  const replied = (needsReply() || replyDoc()) && S.reply;
+  if ((needsReply() || replyDoc()) && !S.reply)
+    add("reply", t === "assignment" ? "Пакет выдачи поручения, по которому событие" : "Исходный пакет, на который отвечаем");
+  if (!S.from && !ORGS.self && !replied) add("from", "Отправитель: в стенде не задана своя организация");
+  if (!S.to.length && !replied && t !== "assignment") add("to", "Хотя бы один получатель");
+  if (["document", "gosedo", "citizen_appeal", "assignment"].includes(t)) {
+    const d = S.document, p = "document.";
+    if (d.kind === "__custom") {
+      if (!/^DK\d{8}$/.test(d.kind_id || "")) add(p + "kind_id", "Код вида документа: DK и 8 цифр, например DK00000001");
+      if (!(d.kind_name || "").trim()) add(p + "kind_name", "Наименование вида документа");
+    }
+    if (!okDate(d.reg_date)) add(p + "reg_date", "Дата регистрации в формате ГГГГ-ММ-ДД");
+    if (!posInt(d.pages)) add(p + "pages", "Страниц в заглушке: целое число от 1");
+    if (d.signer_post && !d.signer_name) add(p + "signer_name", "ФИО подписанта (указана только должность)");
+    if (d.executor_phone && !d.executor_name) add(p + "executor_name", "ФИО исполнителя (указан только телефон)");
+    d.attachments.forEach((a, i) => {
+      if (!a.file && !posInt(a.pages)) add(`${p}attachments.${i}.pages`, `Приложение ${i + 1}: страниц — целое число от 1`);
+    });
+  }
+  if (t === "citizen_appeal") {
+    const c = S.citizen, p = "citizen.";
+    if (!(c.last_name || "").trim()) add(p + "last_name", "Фамилия автора обращения");
+    if (!(c.first_name || "").trim()) add(p + "first_name", "Имя автора обращения");
+    if (c.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.email)) add(p + "email", "E-mail автора: неверный формат");
+    if (!okDate(c.date)) add(p + "date", "Дата обращения в формате ГГГГ-ММ-ДД");
+  }
+  if (t === "receipt" && !S.receipt.accepted) {
+    if (S.format === "3.0" && !S.receipt.reasons.length) add("receipt.reasons", "Хотя бы одна причина отказа в приёме");
+    if (S.format === "2.7.1" && (S.receipt.error_code === "" || !Number.isInteger(Number(S.receipt.error_code))))
+      add("receipt.error_code", "Код ошибки: целое число");
+  }
+  if (t === "notification" && S.notification.kind === "refused" && !S.notification.reasons.length)
+    add("notification.reasons", "Хотя бы одна причина отказа в регистрации");
+  if (t === "assignment") {
+    const a = S.assignment, today = isoToday();
+    if (a.event === "issue") {
+      if (!S.to.length && !a.items.some(it => it.executor)) add("to", "Получатели или исполнитель хотя бы одного пункта");
+      a.items.forEach((it, i) => {
+        const p = `assignment.items.${i}.`;
+        if (!(it.number || "").trim()) add(p + "number", `Пункт ${i + 1}: номер пункта`);
+        if (!it.deadline) add(p + "deadline", `Пункт ${it.number || i + 1}: срок исполнения`);
+        else if (it.deadline < (S.document.reg_date || today)) add(p + "deadline", `Пункт ${it.number || i + 1}: срок исполнения раньше даты регистрации`);
+      });
+    }
+    if (a.event === "change_deadline" && !a.new_deadline) add("assignment.new_deadline", "Новый срок исполнения");
+    if (a.event === "change_deadline" && a.new_deadline && a.new_deadline < today) add("assignment.new_deadline", "Новый срок исполнения уже прошёл");
+    if (a.event === "return" && !a.fix_deadline) add("assignment.fix_deadline", "Срок доработки");
+  }
+  if (S.time_limit !== "" && S.time_limit != null && !posInt(S.time_limit)) add("time_limit", "timeLimit: целое число минут от 1");
+  if (S.message_file && !/^[\w.\-]+\.xml$/i.test(S.message_file)) add("message_file", "Имя паспорта ЭС: латиница, оканчивается на .xml");
+  return E;
+}
+
+function showJson() {
+  try {
+    const sc = buildSpec();
+    openViewer("Сценарий JSON (для python medogen.py build)", JSON.stringify(sc, null, 2), null);
+  } catch (e) { toast(e.message); }
+}
+
+async function doBuild() {
+  FORM_ERRS = formErrors();
+  if (FORM_ERRS.length) {
+    LAST_RESULT = null; renderCreate(); focusPath(FORM_ERRS[0].path);
+    toast(`Не заполнено обязательных полей: ${FORM_ERRS.length}`); return;
+  }
+  let scenario;
+  try { scenario = buildSpec(); } catch (e) { LAST_RESULT = { error: e.message, packages: [], warnings: [] }; renderCreate(); return; }
+  BUSY = true; renderCreate();
+  try { LAST_RESULT = await api("/api/build", { stand: currentStand(), scenario }); }
+  catch (e) { LAST_RESULT = { error: e.message, packages: [], warnings: [] }; }
+  BUSY = false; await loadPackages(); renderCreate();
+}
+
+// ---------- карточка результата / пакета ----------
+function resultCard() {
+  const card = h("div", { class: "card" }, h("h2", {}, "Результат"));
+  const r = LAST_RESULT;
+  if (!r) { card.append(h("div", { class: "empty" }, "Заполните форму и нажмите «Собрать пакет». Готовый пакет появится здесь и на вкладке «Пакеты».")); return card; }
+  if (r.error) card.append(h("div", { class: "msg err" }, h("b", {}, "Пакет не собран. "), r.error));
+  r.packages.forEach(p => card.append(packageView(p)));
+  if (r.warnings?.length) card.append(h("div", { class: "msg warn small" }, h("b", {}, "Предупреждения"), h("ul", {}, ...r.warnings.map(w => h("li", {}, w)))));
+  return card;
+}
+
+function guid(v) { return v ? h("span", { class: "mono copy", title: "Скопировать", onclick: () => copyText(v) }, v) : "—"; }
+
+function packageView(p, opts = {}) {
+  const wrap = h("div", { style: "margin-bottom:14px" });
+  const errs = p.errors;
+  wrap.append(h("div", { class: "actions", style: "justify-content:space-between" },
+    h("div", {}, h("b", {}, typeTitle(p)), " ", h("span", { class: "pill acc" }, p.format || "?"), " ",
+      errs === undefined ? null : errs.length ? h("span", { class: "pill err" }, `ошибок: ${errs.length}`) : h("span", { class: "pill ok" }, META.xsd ? "XSD OK" : "структура OK")),
+    h("span", { class: "small muted" }, p.created || "")));
+  if (errs?.length) wrap.append(h("div", { class: "msg err small" }, h("ul", {}, ...errs.map(e => h("li", {}, e)))));
+  if (p.warnings?.length) wrap.append(h("div", { class: "msg warn small" }, h("b", {}, "Сверка с ГАС (как в проверочном боте МЭДО)"),
+    h("ul", {}, ...p.warnings.map(e => h("li", {}, e.replace(/^ГАС: /, ""))))));
+  if (p.read_error) wrap.append(h("div", { class: "msg err small" }, p.read_error));
+  wrap.append(h("div", { class: "kv" },
+    h("div", {}, "От"), h("div", {}, p.from ? `${p.from.name}` : "—"),
+    h("div", {}, "Кому"), h("div", {}, (p.to || []).map(o => o.name + (o.address ? ` (${o.address})` : "")).join("; ") || "—"),
+    p.reg_number ? [h("div", {}, "Документ"), h("div", {}, `№${p.reg_number} от ${p.reg_date || ""}`)] : null,
+    h("div", {}, "msgUid"), h("div", {}, guid(p.msg_uid)),
+    p.doc_uid ? [h("div", {}, "docUid"), h("div", {}, guid(p.doc_uid))] : null,
+    p.on_msg_uid ? [h("div", {}, "На сообщение"), h("div", {}, guid(p.on_msg_uid))] : null,
+    p.on_doc_uid ? [h("div", {}, "На документ"), h("div", {}, guid(p.on_doc_uid))] : null,
+    p.process_uid ? [h("div", {}, "Процесс"), h("div", {}, guid(p.process_uid))] : null,
+    p.reg_process_uid ? [h("div", {}, "Процесс рег."), h("div", {}, guid(p.reg_process_uid))] : null,
+    h("div", {}, "Папка"), h("div", {}, h("span", { class: "mono copy small", onclick: () => copyText(p.folder) }, p.folder))));
+  const files = h("ul", { class: "files" }, ...(p.files || []).map(f => h("li", {},
+    h("a", { onclick: () => viewFile(p.id, f.name) }, f.name), h("span", { class: "muted small" }, "  " + fmtSize(f.size)),
+    f.entries ? h("ul", {}, ...f.entries.map(e => h("li", {}, h("a", { onclick: () => viewFile(p.id, f.name, e.name) }, e.name), h("span", { class: "muted small" }, "  " + fmtSize(e.size))))) : null)));
+  wrap.append(h("div", { class: "small muted" }, "Файлы (нажмите, чтобы посмотреть)"), files);
+  const replyBtn = (label, type, extra = {}) => h("button", { class: "btn small", type: "button", onclick: () => startReply(p, type, extra) }, label);
+  const isAssign = p.type === "assignment" || (p.type === "incoming" && p.process_uid);
+  wrap.append(h("div", { class: "actions" },
+    h("a", { class: "btn small primary", href: "/api/download?id=" + encodeURIComponent(p.id) }, "Скачать .zip"),
+    !["receipt", "notification"].includes(p.type) && p.from ? h("button", { class: "btn small primary", type: "button", onclick: () => openReplies(p) }, "Ответы пачкой…") : null,
+    !["receipt", "notification"].includes(p.type) && p.from ? replyBtn("Ответный документ", "document") : null,
+    p.type !== "receipt" ? replyBtn("Квитанция", "receipt") : null,
+    !["receipt", "notification"].includes(p.type) ? replyBtn("Уведомление", "notification") : null,
+    isAssign ? replyBtn("Событие по поручению", "assignment") : null,
+    opts.remove ? h("button", { class: "btn small danger", type: "button", onclick: opts.remove }, "Удалить") : null));
+  return wrap;
+}
+
+function startReply(p, type) {
+  S.type = type; S.format = p.format || S.format; S.reply = { id: p.id }; S.from = ""; S.to = [];
+  if (type === "document") { S.reply_doc = true; S.document.annotation = ""; S.document.reg_number = ""; if (S.format === "3.0") S.container = "dev"; }
+  if (type === "assignment" && S.assignment.event === "issue") S.assignment.event = "change_deadline";
+  if (type === "notification" && S.format === "3.0" && !NOTIF_30.includes(S.notification.kind)) S.notification.kind = "registered";
+  save(); LAST_RESULT = null; switchTab("create"); window.scrollTo(0, 0);
+}
+
+async function viewFile(id, name, entry) {
+  try {
+    const q = `id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}` + (entry ? `&entry=${encodeURIComponent(entry)}` : "");
+    const r = await api("/api/file?" + q);
+    openViewer(entry ? `${name} → ${entry}` : name, r.text ?? `Двоичный файл, ${fmtSize(r.size)}. Скачайте, чтобы открыть.`, "/api/file?raw=1&" + q);
+  } catch (e) { toast(e.message); }
+}
+function openViewer(title, text, dl) {
+  $("#viewer-title").textContent = title; $("#viewer-text").textContent = text;
+  const a = $("#viewer-dl"); a.classList.toggle("hidden", !dl); if (dl) a.href = dl;
+  $("#viewer").showModal();
+}
+
+// ---------- ответы на пакет (квитанции и уведомления пачкой) ----------
+const RP = store.get("replies", { pick: { r_ok: true, n_registered: true }, reason30: "102", code271: 3, refuse: "205", reg_number: "" });
+let RP_PKG = null, RP_RESULT = null, RP_BUSY = false, RP_GAS = null;
+function replyKinds(fmt) {
+  const list = [["r_ok", "Квитанция", "о приёме"], ["r_err", "Квитанция", "об отказе в приёме"]];
+  const kinds = fmt === "3.0" ? NOTIF_30 : Object.keys(META.notifications).filter(k => k !== "sent");
+  kinds.forEach(k => list.push(["n_" + k, "Уведомление", META.notifications[k].toLowerCase()]));
+  list.push(["d_doc", "Ответный документ", "исходящий, со связью с входящим"]);
+  return list;
+}
+async function openReplies(p) {
+  RP_PKG = p; RP_RESULT = null; RP_GAS = null;
+  const g = p.from?.guid;
+  if (g && !ORGS.orgs.some(o => o.guid === g)) {
+    try { RP_GAS = (await api("/api/gas?q=" + encodeURIComponent(g))).items.find(o => o.guid === g) || null; } catch (e) {}
+    if (RP_GAS && RP.addr_for === g && !RP.addr) RP.addr_for = null;
+  }
+  const d = $("#replies"); renderReplies(); d.showModal();
+}
+function renderReplies() {
+  const p = RP_PKG, box = $("#replies-body"); box.innerHTML = "";
+  $("#replies-title").textContent = `Ответы на пакет: ${typeTitle(p)}, ${p.format}`;
+  const src = p.from || {}, recv = p.to || [];
+  const known = ORGS.orgs.find(o => o.guid === src.guid) || (RP_GAS && RP_GAS.guid === src.guid ? { ...RP_GAS, gas: true } : null);
+  if (RP.addr_for !== src.guid) { RP.addr = known?.address || ""; RP.addr_for = src.guid; }
+  if (!recv.some(r => r.guid === RP.from)) RP.from = recv[0]?.guid || "";
+  const save = () => store.set("replies", RP);
+  const fromSel = h("select", { onchange: () => { RP.from = fromSel.value; save(); } },
+    ...recv.map(r => h("option", { value: r.guid, selected: r.guid === RP.from }, `${r.name || r.guid}`)));
+  const addr = h("input", { value: RP.addr, class: "mono", placeholder: "например M_MINFIN~MEDOGU", oninput: () => { RP.addr = addr.value; save(); } });
+  const saveAddr = h("input", { type: "checkbox", checked: !known && RP.save_addr });
+  saveAddr.onchange = () => { RP.save_addr = saveAddr.checked; save(); };
+  box.append(h("div", { class: "row" },
+    field("Отвечает (получатель исходного пакета)", recv.length ? fromSel : h("div", { class: "msg warn small" }, "В пакете не найден получатель")),
+    field(`Кому: ${(known?.gas && known.name) || src.name || "—"}`, addr, known ? `Адрес из ${known.gas ? "справочника ГАС" : "справочника стенда"}. GUID ${src.guid}` : `Организации нет ни в стенде, ни в ГАС. GUID ${src.guid}`)));
+  if (!known) box.append(h("label", { class: "check" }, saveAddr, h("span", {}, "Добавить отправителя исходного пакета в справочник стенда")));
+  if (!RP.addr) box.append(h("div", { class: "msg warn small" }, "Без адреса МЭДО в envelope.ini попадёт GUID~MEDOGU. Укажите адрес, если СЭД его проверяет."));
+
+  const kinds = replyKinds(p.format);
+  const list = h("div", { class: "orglist", style: "max-height:none" });
+  kinds.forEach(([k, a, b]) => {
+    const cb = h("input", { type: "checkbox", checked: !!RP.pick[k], onchange: () => { RP.pick[k] = cb.checked; save(); count(); } });
+    let extra = null;
+    if (k === "r_err") extra = p.format === "3.0"
+      ? h("select", { style: "width:auto;max-width:330px", onchange: e => { RP.reason30 = e.target.value; save(); } }, ...Object.entries(META.receipt_reasons).map(([id, t]) => h("option", { value: id, selected: RP.reason30 === id }, `${id} ${t}`)))
+      : h("label", { class: "actions small muted" }, "код ошибки", h("input", { type: "number", style: "width:90px", value: RP.code271, title: "errorCode", oninput: e => { RP.code271 = e.target.value; save(); } }));
+    if (k === "n_refused") extra = h("select", { style: "width:auto;max-width:330px", onchange: e => { RP.refuse = e.target.value; save(); } }, ...Object.entries(META.refusal_reasons).map(([id, t]) => h("option", { value: id, selected: RP.refuse === id }, `${id} ${t}`)));
+    if (k === "n_registered") extra = h("input", { style: "width:140px", placeholder: "вх. номер: авто", value: RP.reg_number, oninput: e => { RP.reg_number = e.target.value; save(); } });
+    if (k === "d_doc") extra = h("button", { class: "btn small", type: "button", title: "Заполнить реквизиты, приложения, свой PDF",
+      onclick: () => { $("#replies").close(); startReply(p, "document"); } }, "Открыть в форме…");
+    list.append(h("div", { class: "actions", style: "justify-content:space-between;padding:3px 0" },
+      h("label", { class: "check", style: "margin:0" }, cb, h("span", {}, h("b", {}, a), " ", b)), extra));
+  });
+  box.append(h("div", { class: "actions", style: "justify-content:space-between;margin:12px 0 6px" }, h("b", {}, "Что сформировать"),
+    h("div", { class: "actions" },
+      h("button", { class: "btn small", type: "button", onclick: () => { kinds.forEach(([k]) => RP.pick[k] = true); save(); renderReplies(); } }, "Отметить всё"),
+      h("button", { class: "btn small", type: "button", onclick: () => { RP.pick = {}; save(); renderReplies(); } }, "Снять"))), list);
+  const btn = h("button", { class: "btn primary", type: "button", disabled: RP_BUSY, onclick: buildReplies });
+  const count = () => { const n = kinds.filter(([k]) => RP.pick[k]).length; btn.textContent = RP_BUSY ? "Сборка…" : `Сформировать ответы (${n})`; btn.disabled = RP_BUSY || !n; };
+  count();
+  box.append(h("div", { class: "actions", style: "margin-top:12px" }, btn,
+    h("span", { class: "small muted" }, "Каждый ответ — отдельный пакет со своей папкой и проверкой XSD.")));
+
+  if (RP_RESULT) {
+    const r = RP_RESULT, bad = r.packages.filter(x => x.errors?.length).length;
+    box.append(h("h3", {}, "Результат"));
+    if (r.error) box.append(h("div", { class: "msg err" }, h("b", {}, "Ошибка. "), r.error));
+    if (r.packages.length) box.append(h("div", { class: "msg " + (bad ? "err" : "ok") }, `Собрано: ${r.packages.length}, с ошибками: ${bad}`));
+    if (r.warnings?.length) box.append(h("div", { class: "msg warn small" }, h("ul", {}, ...r.warnings.map(w => h("li", {}, w)))));
+    box.append(h("table", {}, h("tbody", {}, ...r.packages.map(x => h("tr", {},
+      h("td", {}, typeTitle(x), h("div", { class: "small muted" }, x.name)),
+      h("td", {}, x.errors?.length ? h("span", { class: "pill err", title: x.errors.join("\n") }, "ошибки") : h("span", { class: "pill ok" }, "OK")),
+      h("td", { class: "mono small" }, x.msg_uid),
+      h("td", { style: "white-space:nowrap" }, h("a", { class: "btn small", href: "/api/download?id=" + encodeURIComponent(x.id) }, ".zip"), " ",
+        h("button", { class: "btn small", type: "button", onclick: () => { $("#replies").close(); switchTab("packages"); openPackage(x.id); } }, "Открыть")))))));
+    if (r.packages.length > 1) box.append(h("div", { class: "actions", style: "margin-top:10px" },
+      h("a", { class: "btn primary", href: "/api/download-many?ids=" + encodeURIComponent(r.packages.map(x => x.id).join(",")) }, `Скачать все ответы одним .zip`)));
+  }
+}
+async function buildReplies() {
+  const p = RP_PKG, src = p.from || {};
+  const packages = [];
+  for (const [k, , label] of replyKinds(p.format)) {
+    if (!RP.pick[k]) continue;
+    const base = { format: p.format, reply_to: "ui:" + p.id, from: RP.from || undefined, name: (k.startsWith("r_") ? "квитанция " : "уведомление ") + label };
+    if (k === "d_doc") packages.push({ ...base, name: "ответный документ", type: "document", document: {}, container: p.format === "3.0" ? "dev" : undefined });
+    else if (k === "r_ok") packages.push({ ...base, type: "receipt", receipt: { accepted: true } });
+    else if (k === "r_err") packages.push({ ...base, type: "receipt", receipt: p.format === "3.0" ? { accepted: false, reasons: [{ id: RP.reason30 }] } : { accepted: false, error_code: Number(RP.code271 || 0) } });
+    else {
+      const kind = k.slice(2), n = { kind };
+      if (kind === "registered" && RP.reg_number) n.number = RP.reg_number;
+      if (kind === "refused") n.reasons = [RP.refuse];
+      packages.push({ ...base, type: "notification", notification: n });
+    }
+  }
+  const scenario = { packages };
+  const gasName = RP_GAS && RP_GAS.guid === src.guid ? RP_GAS.name : null;
+  if (RP.addr && src.guid) scenario.orgs = { reply_to: { guid: src.guid, name: gasName || src.name || src.guid, address: RP.addr.trim() } };
+  RP_BUSY = true; renderReplies();
+  try {
+    if (RP.save_addr && !gasName && RP.addr && src.guid && !ORGS.orgs.some(o => o.guid === src.guid)) {
+      ORGS = await api("/api/orgs/save", { stand: currentStand(), org: { key: "o_" + src.guid.slice(0, 8), guid: src.guid, name: src.name || src.guid, address: RP.addr.trim() } });
+    }
+    RP_RESULT = await api("/api/build", { stand: currentStand(), scenario });
+  } catch (e) { RP_RESULT = { error: e.message, packages: [] }; }
+  RP_BUSY = false; await loadPackages(); renderReplies();
+}
+
+// ---------- вкладка «Пакеты» ----------
+let PKG_SEL = null, PKG_DETAIL = null;
+const PF = { q: "", type: "", format: "" };
+function renderPackages() {
+  const root = $("#tab-packages"); root.innerHTML = "";
+  const list = h("div", { class: "card" }, h("h2", {}, "Собранные и входящие пакеты"));
+  const q = h("input", { placeholder: "Поиск: название, номер, GUID, организация", value: PF.q, oninput: () => { PF.q = q.value; fill(); } });
+  const tsel = h("select", { onchange: () => { PF.type = tsel.value; fill(); } }, h("option", { value: "" }, "Все типы"),
+    ...Object.entries(META.types).map(([k, v]) => h("option", { value: k, selected: PF.type === k }, v)), h("option", { value: "incoming", selected: PF.type === "incoming" }, "Входящие"));
+  const fsel = h("select", { onchange: () => { PF.format = fsel.value; fill(); } }, h("option", { value: "" }, "Все форматы"), ...["3.0", "2.7.1"].map(f => h("option", { value: f, selected: PF.format === f }, f)));
+  const inp = h("input", { type: "file", multiple: true, class: "hidden", onchange: () => uploadIncoming([...inp.files]) });
+  const dir = h("input", { type: "file", multiple: true, webkitdirectory: true, class: "hidden", onchange: () => uploadIncoming([...dir.files]) });
+  list.addEventListener("dragover", e => { e.preventDefault(); list.style.outline = "2px dashed var(--accent)"; });
+  list.addEventListener("dragleave", () => { list.style.outline = ""; });
+  list.addEventListener("drop", e => { e.preventDefault(); list.style.outline = ""; uploadIncoming([...e.dataTransfer.files]); });
+  list.append(h("div", { class: "filters" }, q, tsel, fsel,
+    h("button", { class: "btn", type: "button", onclick: () => inp.click(), title: "Архив пакета или его файлы: envelope.ini, message.xml, *.edc.zip" }, "Загрузить пакет (.zip или файлы)"), inp,
+    h("button", { class: "btn", type: "button", onclick: () => dir.click() }, "Папку пакета"), dir,
+    h("button", { class: "btn", type: "button", onclick: async () => { await loadPackages(); renderPackages(); } }, "Обновить")));
+  list.append(h("div", { class: "hint", style: "margin:-2px 0 10px" }, "Пакет из СЭД можно перетащить сюда: архив .zip или сразу файлы пакета. После загрузки он проверяется, и к нему можно сформировать квитанции и уведомления."));
+  const tbody = h("tbody");
+  list.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Создан"), h("th", {}, "Тип"), h("th", {}, "Формат"), h("th", {}, "От → кому"), h("th", {}, "Документ"))), tbody)));
+  function fill() {
+    tbody.innerHTML = "";
+    const qq = PF.q.toLowerCase();
+    const rows = PACKAGES.filter(p => (!PF.type || p.type === PF.type) && (!PF.format || p.format === PF.format) &&
+      (!qq || JSON.stringify([p.name, p.reg_number, p.msg_uid, p.doc_uid, p.from, p.to, p.id]).toLowerCase().includes(qq)));
+    if (!rows.length) tbody.append(h("tr", {}, h("td", { colspan: 5, class: "empty" }, PACKAGES.length ? "Ничего не найдено" : "Пакетов пока нет")));
+    rows.forEach(p => tbody.append(h("tr", { class: "click" + (p.id === PKG_SEL ? " sel" : ""), onclick: () => openPackage(p.id) },
+      h("td", { class: "small" }, p.created), h("td", {}, typeTitle(p)), h("td", {}, p.format || "?"),
+      h("td", { class: "small" }, (p.from?.name || "—") + " → " + ((p.to || []).map(o => o.name).join(", ") || "—")),
+      h("td", { class: "small" }, p.reg_number ? `№${p.reg_number}` : ""))));
+  }
+  fill();
+  const detail = h("div", { class: "card sticky" }, h("h2", {}, "Пакет"));
+  if (PKG_DETAIL) detail.append(packageView(PKG_DETAIL, { remove: async () => {
+    if (!confirm("Удалить пакет с диска?")) return;
+    try { await api("/api/delete", { id: PKG_DETAIL.id }); PKG_SEL = null; PKG_DETAIL = null; await loadPackages(); renderPackages(); } catch (e) { toast(e.message); } } }));
+  else detail.append(h("div", { class: "empty" }, "Выберите пакет в списке. При открытии пакет проверяется заново."));
+  root.append(h("div", { class: "grid" }, list, detail));
+}
+async function uploadIncoming(files) {
+  if (!files.length) return;
+  try {
+    toast("Загрузка…");
+    const ups = [];
+    for (const f of files) ups.push((await upload(f)).path);
+    const name = files[0].webkitRelativePath ? files[0].webkitRelativePath.split("/")[0] : "пакет";
+    const card = await api("/api/incoming", { uploads: ups, name });
+    await loadPackages(); PKG_SEL = card.id; PKG_DETAIL = card; switchTab("packages");
+    toast(card.errors?.length ? "Пакет загружен, есть замечания проверки" : "Пакет загружен и проверен");
+    if (card.from && !["receipt", "notification"].includes(card.type)) openReplies(card);
+  } catch (e) { toast("Ошибка: " + e.message); }
+}
+async function openPackage(id) {
+  PKG_SEL = id; PKG_DETAIL = null; renderPackages();
+  try { PKG_DETAIL = await api("/api/package?id=" + encodeURIComponent(id)); } catch (e) { toast(e.message); }
+  renderPackages();
+}
+
+// ---------- вкладка «Сценарии» ----------
+let SC_RESULT = null, SC_BUSY = "";
+function renderScenarios() {
+  const root = $("#tab-scenarios"); root.innerHTML = "";
+  const left = h("div", { class: "card" }, h("h2", {}, "Готовые сценарии"),
+    h("div", { class: "hint", style: "margin:0 0 10px" }, "Сценарии из папки examples. Каждый собирает цепочку пакетов: документ и ответы на него, поручение и события по нему."));
+  const t = h("table", {}, h("tbody", {}, ...META.examples.map(e => h("tr", {},
+    h("td", {}, h("b", { class: "mono" }, e.file), h("div", { class: "small muted" }, e.description)),
+    h("td", { style: "width:1%" }, h("button", { class: "btn small" + (SC_BUSY === e.file ? "" : ""), type: "button", disabled: !!SC_BUSY,
+      onclick: () => runScenario({ example: e.file }, e.file) }, SC_BUSY === e.file ? h("span", { class: "spin" }) : "Собрать"))))));
+  left.append(t);
+  const inp = h("input", { type: "file", accept: ".json", class: "hidden", onchange: async () => {
+    const f = inp.files[0]; if (!f) return;
+    try { const sc = JSON.parse(await f.text()); runScenario({ scenario: sc }, f.name); } catch (e) { toast("Не удалось прочитать JSON: " + e.message); } } });
+  left.append(h("h3", {}, "Свой сценарий"), h("div", { class: "actions" },
+    h("button", { class: "btn", type: "button", onclick: () => inp.click(), disabled: !!SC_BUSY }, "Загрузить сценарий .json"), inp),
+    h("div", { class: "hint", style: "margin-top:6px" }, "Пути к файлам в своём сценарии указывайте полностью (D:\\...). Формат описан в README."));
+  const right = h("div", { class: "card sticky" }, h("h2", {}, "Результат"));
+  if (!SC_RESULT) right.append(h("div", { class: "empty" }, "Выберите сценарий."));
+  else {
+    if (SC_RESULT.error) right.append(h("div", { class: "msg err" }, h("b", {}, "Ошибка. "), SC_RESULT.error));
+    const bad = SC_RESULT.packages.filter(p => p.errors?.length).length;
+    right.append(h("div", { class: "msg " + (bad || SC_RESULT.error ? "err" : "ok") }, `${SC_RESULT.title}: собрано ${SC_RESULT.packages.length}, с ошибками ${bad}`));
+    if (SC_RESULT.warnings?.length) right.append(h("div", { class: "msg warn small" }, h("ul", {}, ...SC_RESULT.warnings.map(w => h("li", {}, w)))));
+    right.append(h("table", {}, h("tbody", {}, ...SC_RESULT.packages.map(p => h("tr", { class: "click", onclick: () => { switchTab("packages"); openPackage(p.id); } },
+      h("td", {}, typeTitle(p), h("div", { class: "small muted" }, p.name)), h("td", {}, p.format),
+      h("td", {}, p.errors?.length ? h("span", { class: "pill err" }, "ошибки") : h("span", { class: "pill ok" }, "OK")),
+      h("td", {}, h("a", { class: "btn small", href: "/api/download?id=" + encodeURIComponent(p.id), onclick: ev => ev.stopPropagation() }, ".zip")))))));
+  }
+  root.append(h("div", { class: "grid" }, left, right));
+}
+async function runScenario(body, title) {
+  SC_BUSY = title; renderScenarios();
+  try { SC_RESULT = await api("/api/build", { stand: currentStand(), ...body }); }
+  catch (e) { SC_RESULT = { error: e.message, packages: [] }; }
+  SC_RESULT.title = title; SC_BUSY = ""; await loadPackages(); renderScenarios();
+}
+
+// ---------- вкладка «Организации» ----------
+let ORG_EDIT = null;
+function renderOrgs() {
+  const root = $("#tab-orgs"); root.innerHTML = "";
+  const list = h("div", { class: "card" }, h("h2", {}, `Организации стенда «${ORGS.stand || ORGS.file}»`),
+    h("div", { class: "hint", style: "margin:0 0 10px" }, `Файл orgs\\${ORGS.file}. GUID берутся из ГАС ГосЭДО или со своего стенда; адрес МЭДО нужен для envelope.ini.`));
+  const q = h("input", { placeholder: "Поиск", oninput: () => fill() });
+  list.append(h("div", { class: "filters" }, q));
+  const tbody = h("tbody");
+  list.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Организация"), h("th", {}, "GUID"), h("th", {}, "Адрес МЭДО"), h("th", {}))), tbody)));
+  function fill() {
+    tbody.innerHTML = "";
+    const qq = q.value.toLowerCase();
+    ORGS.orgs.filter(o => !qq || JSON.stringify(o).toLowerCase().includes(qq)).forEach(o => tbody.append(h("tr", {},
+      h("td", {}, o.name, o.key === ORGS.self ? h("span", { class: "pill acc", style: "margin-left:6px" }, "своя") : null, h("div", { class: "small muted mono" }, o.key)),
+      h("td", {}, guid(o.guid)), h("td", { class: "mono" }, o.address || h("span", { class: "muted" }, "—")),
+      h("td", { style: "white-space:nowrap" }, h("button", { class: "btn small", type: "button", onclick: () => { ORG_EDIT = { ...o, old_key: o.key }; renderOrgs(); } }, "Изменить"), " ",
+        h("button", { class: "btn small danger", type: "button", onclick: async () => {
+          if (!confirm(`Удалить ${o.name} из справочника?`)) return;
+          try { ORGS = await api("/api/orgs/delete", { stand: currentStand(), key: o.key }); renderOrgs(); } catch (e) { toast(e.message); } } }, "×")))));
+    if (!ORGS.orgs.length) tbody.append(h("tr", {}, h("td", { colspan: 4, class: "empty" }, "Справочник пуст")));
+  }
+  fill();
+
+  const side = h("div", {});
+  const e = ORG_EDIT || { key: "", name: "", guid: "", address: "" };
+  const fk = h("input", { value: e.key, placeholder: "minfin" }), fn = h("input", { value: e.name, placeholder: "Минфин России" }),
+    fg = h("input", { value: e.guid, placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", class: "mono" }), fa = h("input", { value: e.address || "", placeholder: "M_MINFIN~MEDOGU", class: "mono" });
+  const fself = h("input", { type: "checkbox", checked: ORG_EDIT && ORG_EDIT.key === ORGS.self });
+  side.append(h("div", { class: "card" }, h("h2", {}, ORG_EDIT ? "Изменить организацию" : "Добавить организацию"),
+    field("Ключ (латиницей, для сценариев)", fk), field("Название", fn), field("GUID участника", fg), field("Адрес МЭДО", fa),
+    h("label", { class: "check" }, fself, h("span", {}, "Своя организация (отправитель по умолчанию)")),
+    h("div", { class: "actions", style: "margin-top:8px" },
+      h("button", { class: "btn primary", type: "button", onclick: async () => {
+        try { ORGS = await api("/api/orgs/save", { stand: currentStand(), old_key: ORG_EDIT?.old_key, make_self: fself.checked, org: { key: fk.value, name: fn.value, guid: fg.value, address: fa.value } }); ORG_EDIT = null; toast("Сохранено"); renderOrgs(); }
+        catch (err) { toast(err.message); } } }, "Сохранить"),
+      ORG_EDIT ? h("button", { class: "btn", type: "button", onclick: () => { ORG_EDIT = null; renderOrgs(); } }, "Отмена") : null)));
+
+  const sname = h("input", { placeholder: "stand_test" }), stitle = h("input", { placeholder: "Тестовый стенд 1" });
+  const scopy = h("input", { type: "checkbox" });
+  side.append(h("div", { class: "card" }, h("h2", {}, "Новый стенд"),
+    h("div", { class: "row" }, field("Имя файла", sname), field("Название", stitle)),
+    h("label", { class: "check" }, scopy, h("span", {}, "Скопировать организации из текущего стенда")),
+    h("button", { class: "btn", type: "button", onclick: async () => {
+      try { const r = await api("/api/orgs/new", { file: sname.value, stand: stitle.value, copy_from: scopy.checked ? currentStand() : null }); await loadMeta(); setStand(r.file); toast("Стенд создан"); }
+      catch (err) { toast(err.message); } } }, "Создать")));
+
+  const imp = h("input", { type: "file", accept: ".html,.htm,.csv,.txt", class: "hidden" });
+  const gasInfo = h("div", { class: "small muted", style: "margin-bottom:8px" }, "…");
+  api("/api/gas?q=").then(r => { gasInfo.textContent = r.total ? `Организаций: ${r.total}, обновлён ${r.updated || "—"}${r.source ? " (" + r.source + ")" : ""}` : "Справочник пуст"; }).catch(() => {});
+  side.append(h("div", { class: "card" }, h("h2", {}, "Справочник ГАС ГосЭДО"), gasInfo,
+    h("div", { class: "hint", style: "margin:0 0 10px" }, "Общий справочник всех участников (файл gas\\gas.json). Из него можно выбрать отправителя и получателей в форме, не добавляя их в стенд. Откройте ",
+      h("a", { href: "https://gosedo.ru/wp-content/uploads/files/addresseesActual.html", target: "_blank" }, "ГАС ГосЭДО"),
+      ", сохраните страницу (Ctrl+S, «Веб-страница полностью») и загрузите файл. Повторная загрузка обновит записи."), imp,
+    h("button", { class: "btn", type: "button", onclick: () => imp.click() }, "Загрузить / обновить справочник ГАС"),
+    h("div", { style: "margin-top:12px" }, h("div", { class: "small muted", style: "margin-bottom:3px" }, "Найти и добавить в стенд"),
+      gasPicker(o => { ORG_EDIT = { key: "g_" + o.guid.slice(0, 8), name: o.name, guid: o.guid, address: o.address || "" }; renderOrgs(); window.scrollTo(0, 0); toast("Проверьте ключ и нажмите «Сохранить»"); }))));
+  imp.onchange = async () => {
+    const f = imp.files[0]; if (!f) return;
+    try { const u = await upload(f); const r = await api("/api/gas/import", { upload: u.path });
+      toast(`ГАС: добавлено ${r.added}, обновлено ${r.updated}, всего ${r.total}`); renderOrgs(); }
+    catch (err) { toast(err.message); }
+  };
+  root.append(h("div", { class: "grid" }, list, side));
+}
+
+// ---------- навигация и загрузка ----------
+let TAB = "create";
+function switchTab(t) {
+  TAB = t; store.set("tab", t);
+  document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  ["create", "packages", "scenarios", "orgs"].forEach(x => $("#tab-" + x).classList.toggle("hidden", x !== t));
+  render();
+}
+function render() { ({ create: renderCreate, packages: renderPackages, scenarios: renderScenarios, orgs: renderOrgs })[TAB](); }
+function currentStand() { return $("#stand").value; }
+async function setStand(file) {
+  store.set("stand", file);
+  fillStands(file);
+  ORGS = await api("/api/orgs?stand=" + encodeURIComponent(file));
+  S.from = ORGS.orgs.some(o => o.key === S.from) || GAS_PICKED[S.from] ? S.from : "";
+  S.to = S.to.filter(k => ORGS.orgs.some(o => o.key === k) || GAS_PICKED[k]);
+  render();
+}
+function fillStands(sel) {
+  const s = $("#stand"); s.innerHTML = "";
+  META.stands.forEach(x => s.append(h("option", { value: x.file, selected: x.file === sel }, `${x.stand || x.file} (${x.count})`)));
+}
+async function loadMeta() {
+  META = await api("/api/meta");
+  const x = $("#xsd");
+  x.textContent = META.xsd ? "проверка XSD включена" : "без lxml: только структура";
+  x.className = "pill " + (META.xsd ? "ok" : "err");
+  x.title = META.xsd ? "" : "pip install lxml — чтобы проверять пакеты по XSD";
+}
+async function loadPackages() { try { PACKAGES = await api("/api/packages"); } catch (e) { PACKAGES = []; } }
+
+document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+$("#stand").addEventListener("change", () => setStand(currentStand()));
+(async function init() {
+  try {
+    await loadMeta(); await loadPackages();
+    const want = store.get("stand", "default.json");
+    const file = META.stands.some(s => s.file === want) ? want : (META.stands[0]?.file || "default.json");
+    TAB = store.get("tab", "create");
+    await setStand(file);
+    switchTab(TAB);
+  } catch (e) {
+    $("main").innerHTML = ""; $("main").append(h("div", { class: "msg err" }, "Не удалось загрузить данные: " + e.message));
+  }
+})();
+</script>
+</body>
+</html>

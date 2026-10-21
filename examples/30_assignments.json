@@ -1,0 +1,16 @@
+{
+  "description": "3.0: цифровые поручения — выдача и события по ходу контроля (ТК ДЭВ с digital.xml); последнее событие — в ТК ГосЭДО",
+  "defaults": {"format": "3.0", "type": "assignment"},
+  "packages": [
+    {"name": "issue", "from": "apparat_rf", "to": ["minsport", "minenergo"],
+     "document": {"reg_number": "65", "signer": {"post": "Заместитель Председателя Правительства Российской Федерации", "name": "Чернышенко Дмитрий Николаевич", "id": "123-456-789 00"}},
+     "assignment": {"event": "issue", "items": [
+       {"number": "5", "text": "Проработать вопрос и направить предложения в Аппарат Правительства РФ.", "deadline": "today+90", "executor": "minsport", "coexecutors": ["minenergo"]},
+       {"number": "10", "text": "Провести сопутствующие мероприятия.", "deadline": "today+120", "executor": "minsport"}
+     ]}},
+    {"name": "change_deadline", "based_on": "@issue", "assignment": {"event": "change_deadline", "new_deadline": "today+150"}},
+    {"name": "return", "based_on": "@issue", "assignment": {"event": "return", "remarks": "Дополнить сведениями по подведомственным организациям.", "fix_deadline": "today+30"}},
+    {"name": "accept", "based_on": "@issue", "assignment": {"event": "accept"}},
+    {"name": "stop_gosedo", "based_on": "@issue", "container": "gosedo", "assignment": {"event": "stop"}}
+  ]
+}
