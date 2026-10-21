@@ -25,7 +25,7 @@
 ## Установка
 
 ```
-git clone https://github.com/Yaymko/Yaymko-medogen.git medogen
+git clone https://github.com/Yaymko/Medogen.git medogen
 cd medogen
 ```
 

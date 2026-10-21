@@ -27,7 +27,7 @@
 ```
 sudo apt install -y python3 python3-venv git
 sudo useradd -r -m -d /opt/medogen -s /usr/sbin/nologin medogen
-sudo -u medogen git clone https://github.com/Yaymko/Yaymko-medogen.git /opt/medogen/app
+sudo -u medogen git clone https://github.com/Yaymko/Medogen.git /opt/medogen/app
 sudo -u medogen python3 -m venv /opt/medogen/venv
 sudo -u medogen /opt/medogen/venv/bin/pip install lxml
 ```
@@ -40,7 +40,7 @@ medogen вручную, например архивом из GitHub (Code → Do
 **Windows Server:**
 
 ```
-git clone https://github.com/Yaymko/Yaymko-medogen.git C:\medogen
+git clone https://github.com/Yaymko/Medogen.git C:\medogen
 cd C:\medogen
 python -m pip install lxml
 ```
