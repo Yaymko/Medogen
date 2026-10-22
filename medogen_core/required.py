@@ -190,6 +190,9 @@ def message_27(root, label, errors):
                 f = c.el(b, "body", "имя файла ТК (container/body)")
                 info["container_file"] = _text(f)
             if branch == "document" and b is not None:
+                sig = b.find(f"{M_OLD}signatories/{M_OLD}signatory")
+                if sig is not None and not _text(sig.find(M_OLD + "region")):
+                    c.err("не заполнен регион первого подписанта (document/signatories/signatory[1]/region)")
                 info["files"] = [c.attr(f, "localName", "files/file/@localName")
                                  for f in root.findall(f"{M_OLD}files/{M_OLD}file")]
     di = root.find(M_OLD + "deliveryIndex")

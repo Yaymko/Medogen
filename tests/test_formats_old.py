@@ -38,7 +38,7 @@ DOC_26 = """﻿<?xml version="1.0" encoding="UTF-8"?>
     </p3:num>
     <p3:signatories>
       <p3:signatory>
-        <p3:organization>Тестовая организация</p3:organization>
+        {region}<p3:organization>Тестовая организация</p3:organization>
         <p3:person>Иванов Иван Иванович</p3:person>
         <p3:post>Руководитель</p3:post>
         <p3:signed>2025-01-30</p3:signed>
@@ -71,10 +71,14 @@ DELIVERY = """  <p3:deliveryIndex>
 """
 
 
-def make_26(folder, name="Письмо 1.docx", delivery=True, create_file=True):
+REGION = '<p3:region p3:id="DP00000077">Московская область</p3:region>\n        '
+
+
+def make_26(folder, name="Письмо 1.docx", delivery=True, create_file=True, region=True):
     os.makedirs(folder)
     with open(os.path.join(folder, "document.xml"), "w", encoding="utf-8") as f:
-        f.write(DOC_26.replace("{name}", name).replace("{delivery}", DELIVERY if delivery else ""))
+        f.write(DOC_26.replace("{name}", name).replace("{delivery}", DELIVERY if delivery else "")
+                .replace("{region}", REGION if region else ""))
     files = ["document.xml"]
     if create_file:
         with open(os.path.join(folder, name), "wb") as f:
@@ -121,6 +125,12 @@ class ReadOld(unittest.TestCase):
     def test_read_without_delivery_index(self):
         folder = make_26(os.path.join(self.box.name, "p"), delivery=False)
         self.assertEqual(read_package(folder)["receivers"], [])
+
+    def test_3_7_26_signatory_without_region(self):
+        """Бот, показатель 3.7: у signatory[1] документа 2.6 нет region — 0 баллов."""
+        folder = make_26(os.path.join(self.box.name, "noreg"), region=False)
+        errors = validate.validate_folder(folder)
+        self.assertTrue(any("region" in e for e in errors), errors)
 
     def test_26_missing_listed_file(self):
         folder = make_26(os.path.join(self.box.name, "p"), name="nope.docx", create_file=False)
@@ -267,6 +277,19 @@ class Build26(unittest.TestCase):
         self.assertEqual([(f.get(NS_M + "localName"), f.get(NS_M + "localId")) for f in files],
                          [("document.pdf", "1"), ("document_att1.pdf", "2")])
         self.assertEqual(read_package(folder)["format"], "2.6")
+
+    def test_3_7_signatory_region_from_place(self):
+        """Бот, показатель 3.7: регион подписанта с кодом из справочника мест (как documentPlace)."""
+        for version in ("2.6", "2.5"):
+            with self.subTest(version=version):
+                folder = self.one(type="document", format=version, document={"place": "DP00000077"})
+                self.assertValid(folder)
+                sig = xml_root(os.path.join(folder, "document.xml")).find(
+                    f"{NS_M}document/{NS_M}signatories/{NS_M}signatory")
+                reg = sig[0]
+                self.assertEqual(reg.tag, NS_M + "region")
+                self.assertEqual(reg.get(NS_M + "id"), "DP00000077")
+                self.assertTrue(reg.text)
 
     def test_citizen_appeal_valid(self):
         folder = self.one(type="citizen_appeal", citizen={"last_name": "Петров", "first_name": "Пётр"})

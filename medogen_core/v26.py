@@ -53,6 +53,7 @@ def document_message(ctx, uid, doc, files, version):
              E("xdms:classification", doc.classification[1], {"xdms:id": doc.classification[0]}),
              E("xdms:signatories", None, None, *[
                  E("xdms:signatory", None, None,
+                   E("xdms:region", doc.place[1], {"xdms:id": doc.place[0]}),  # показатель 3.7 бота
                    E("xdms:organization", ctx.sender.name), E("xdms:person", s.name),
                    E("xdms:department", doc.department) if doc.department else None,
                    E("xdms:post", s.post), E("xdms:signed", doc.reg_date))
