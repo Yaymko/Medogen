@@ -789,6 +789,7 @@ function packageView(p, opts = {}) {
     p.on_msg_uid ? [h("div", {}, "На сообщение"), h("div", {}, guid(p.on_msg_uid))] : null,
     p.on_doc_uid ? [h("div", {}, "На документ"), h("div", {}, guid(p.on_doc_uid))] : null,
     p.process_uid ? [h("div", {}, "Процесс"), h("div", {}, guid(p.process_uid))] : null,
+    p.taken_from ? [h("div", {}, "Забран из OUT"), h("div", {}, `стенд «${p.taken_from.stand}», ${p.taken_from.at}`, h("div", { class: "small muted mono" }, p.taken_from.out))] : null,
     p.sent_in?.length ? [h("div", {}, "В IN"), h("div", {}, p.sent_in[p.sent_in.length - 1].at, h("div", { class: "small muted mono" }, p.sent_in[p.sent_in.length - 1].path))] : null,
     p.reg_process_uid ? [h("div", {}, "Процесс рег."), h("div", {}, guid(p.reg_process_uid))] : null,
     h("div", {}, "Папка"), h("div", {}, h("span", { class: "mono copy small", onclick: () => copyText(p.folder) }, p.folder))));
@@ -1017,17 +1018,18 @@ function renderPackages() {
     h("button", { class: "btn", type: "button", onclick: async () => { await loadPackages(); renderPackages(); } }, "Обновить")));
   list.append(h("div", { class: "hint", style: "margin:-2px 0 10px" }, "Пакет из СЭД можно перетащить сюда: архив .zip или сразу файлы пакета. После загрузки он проверяется, и к нему можно сформировать квитанции и уведомления."));
   const tbody = h("tbody");
-  list.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Создан"), h("th", {}, "Тип"), h("th", {}, "Формат"), h("th", {}, "От → кому"), h("th", {}, "Документ"))), tbody)));
+  list.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Создан"), h("th", {}, "Тип"), h("th", {}, "Формат"), h("th", {}, "От → кому"), h("th", {}, "Документ"), h("th", {}, "Забран со стенда"))), tbody)));
   function fill() {
     tbody.innerHTML = "";
     const qq = PF.q.toLowerCase();
     const rows = PACKAGES.filter(p => (!PF.type || p.type === PF.type) && (!PF.format || p.format === PF.format) &&
-      (!qq || JSON.stringify([p.name, p.reg_number, p.msg_uid, p.doc_uid, p.from, p.to, p.id]).toLowerCase().includes(qq)));
-    if (!rows.length) tbody.append(h("tr", {}, h("td", { colspan: 5, class: "empty" }, PACKAGES.length ? "Ничего не найдено" : "Пакетов пока нет")));
+      (!qq || JSON.stringify([p.name, p.reg_number, p.msg_uid, p.doc_uid, p.from, p.to, p.id, p.taken_from?.stand]).toLowerCase().includes(qq)));
+    if (!rows.length) tbody.append(h("tr", {}, h("td", { colspan: 6, class: "empty" }, PACKAGES.length ? "Ничего не найдено" : "Пакетов пока нет")));
     rows.forEach(p => tbody.append(h("tr", { class: "click" + (p.id === PKG_SEL ? " sel" : ""), onclick: () => openPackage(p.id) },
       h("td", { class: "small" }, p.created), h("td", {}, typeTitle(p)), h("td", {}, p.format || "?"),
       h("td", { class: "small" }, (p.from?.name || "—") + " → " + ((p.to || []).map(o => o.name).join(", ") || "—")),
-      h("td", { class: "small" }, p.reg_number ? `№${p.reg_number}` : ""))));
+      h("td", { class: "small" }, p.reg_number ? `№${p.reg_number}` : ""),
+      h("td", { class: "small", title: p.taken_from ? `${p.taken_from.out}, ${p.taken_from.at}` : "" }, p.taken_from?.stand || ""))));
   }
   fill();
   const detail = h("div", { class: "card sticky" }, h("h2", {}, "Пакет"));

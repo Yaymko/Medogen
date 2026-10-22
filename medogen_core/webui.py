@@ -269,6 +269,9 @@ class App:
                              "items": info.get("items")})
             except Exception as e:
                 card.update({"type": "incoming", "name": os.path.basename(folder), "read_error": str(e)})
+        tpath = self._taken_path(folder)
+        if tpath and os.path.isfile(tpath):
+            card["taken_from"] = load_json(tpath)
         card["files"] = self.file_tree(folder)
         if with_errors:
             card["warnings"] = []
@@ -311,6 +314,9 @@ class App:
         folder = self.pkg_path(body["id"])
         if body["id"].startswith("_incoming/"):
             folder = os.path.join(self.incoming, body["id"].split("/")[1])
+            tpath = self._taken_path(folder)
+            if tpath and os.path.isfile(tpath):
+                os.remove(tpath)
         shutil.rmtree(folder)
         mpath = os.path.join(os.path.dirname(folder), "_manifests", os.path.basename(folder) + ".json")
         if os.path.isfile(mpath):
@@ -403,8 +409,25 @@ class App:
         with EXCHANGE_LOCK:
             dest = os.path.join(self.incoming, safe_dir_name(f"{_stamp()}_{name}"))
             copy, archived, err = exchange.take(p["out"], p["archive"], name, dest)
+        stand_file = os.path.basename(self.stand_path(body.get("stand")))
+        self._write_taken(dest, {"stand_file": stand_file, "stand": self.orgs(stand_file).get("stand") or stand_file,
+                                 "out": p["out"], "archived": archived,
+                                 "at": dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S")})
         return {"package": self.package_card(self._find_package_root(copy)),
                 "archived": archived, "archive_error": err}
+
+    def _taken_path(self, folder):
+        """_incoming/_taken/<папка>.json — откуда (стенд, OUT) забран входящий пакет."""
+        rel = self.pkg_id(folder)
+        if not rel.startswith("_incoming/"):
+            return None
+        return os.path.join(self.incoming, "_taken", rel.split("/")[1] + ".json")
+
+    def _write_taken(self, dest, info):
+        path = self._taken_path(dest)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False, indent=2)
 
     def _mark_sent_in(self, folder, path):
         """Отметка «положен в IN» в манифесте; ошибка записи отметки не отменяет саму отправку."""

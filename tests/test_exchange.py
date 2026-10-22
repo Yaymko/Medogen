@@ -218,6 +218,19 @@ class AppExchange(unittest.TestCase):
         self.assertTrue(os.path.isdir(r["archived"]))
         self.assertEqual(self.app.exchange_out("default.json")["items"], [])
 
+    def test_history_shows_stand_of_taken_package(self):
+        # Alex: в истории пакетов видно, с какого стенда забран пакет; у собранных — пусто
+        built = self.build()
+        name = os.path.basename(built["folder"])
+        shutil.copytree(built["folder"], os.path.join(self.out, name))
+        taken = self.app.exchange_take({"stand": "default.json", "name": name})["package"]
+        self.assertEqual(taken["taken_from"]["stand_file"], "default.json")
+        self.assertTrue(taken["taken_from"]["stand"])
+        self.assertEqual(taken["taken_from"]["out"], self.out)
+        cards = {c["id"]: c for c in self.app.packages()}
+        self.assertEqual(cards[taken["id"]]["taken_from"]["stand_file"], "default.json")
+        self.assertIsNone(cards[built["id"]].get("taken_from"))
+
     def test_put_refuses_incoming_and_invalid(self):
         card = self.build()
         name = os.path.basename(card["folder"])
