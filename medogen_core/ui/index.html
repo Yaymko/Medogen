@@ -789,6 +789,7 @@ function packageView(p, opts = {}) {
     p.on_msg_uid ? [h("div", {}, "На сообщение"), h("div", {}, guid(p.on_msg_uid))] : null,
     p.on_doc_uid ? [h("div", {}, "На документ"), h("div", {}, guid(p.on_doc_uid))] : null,
     p.process_uid ? [h("div", {}, "Процесс"), h("div", {}, guid(p.process_uid))] : null,
+    p.sent_in?.length ? [h("div", {}, "В IN"), h("div", {}, p.sent_in[p.sent_in.length - 1].at, h("div", { class: "small muted mono" }, p.sent_in[p.sent_in.length - 1].path))] : null,
     p.reg_process_uid ? [h("div", {}, "Процесс рег."), h("div", {}, guid(p.reg_process_uid))] : null,
     h("div", {}, "Папка"), h("div", {}, h("span", { class: "mono copy small", onclick: () => copyText(p.folder) }, p.folder))));
   const files = h("ul", { class: "files" }, ...(p.files || []).map(f => h("li", {},
@@ -804,6 +805,8 @@ function packageView(p, opts = {}) {
     p.type !== "receipt" ? replyBtn("Квитанция", "receipt") : null,
     !["receipt", "notification"].includes(p.type) ? replyBtn("Уведомление", "notification") : null,
     isAssign ? replyBtn("Событие по поручению", "assignment") : null,
+    ORGS.exchange?.in && !p.incoming ? h("button", { class: "btn small", type: "button", title: ORGS.exchange.in, onclick: async () => {
+      try { const res = await putIn([p.id]); if (res[0].ok) { Object.assign(p, await api("/api/package?id=" + encodeURIComponent(p.id))); render(); } } catch (e) { toast(e.message); } } }, "Положить в IN") : null,
     opts.remove ? h("button", { class: "btn small danger", type: "button", onclick: opts.remove }, "Удалить") : null));
   return wrap;
 }
@@ -889,6 +892,10 @@ function renderReplies() {
   const btn = h("button", { class: "btn primary", type: "button", disabled: RP_BUSY, onclick: buildReplies });
   const count = () => { const n = kinds.filter(([k]) => RP.pick[k]).length; btn.textContent = RP_BUSY ? "Сборка…" : `Сформировать ответы (${n})`; btn.disabled = RP_BUSY || !n; };
   count();
+  if (ORGS.exchange?.in) {
+    const toIn = h("input", { type: "checkbox", checked: !!RP.to_in, onchange: () => { RP.to_in = toIn.checked; save(); } });
+    box.append(h("label", { class: "check", style: "margin-top:10px", title: ORGS.exchange.in }, toIn, h("span", {}, "Сразу положить в IN пакеты без ошибок")));
+  }
   box.append(h("div", { class: "actions", style: "margin-top:12px" }, btn,
     h("span", { class: "small muted" }, "Каждый ответ — отдельный пакет со своей папкой и проверкой XSD.")));
 
@@ -902,10 +909,13 @@ function renderReplies() {
       h("td", {}, typeTitle(x), h("div", { class: "small muted" }, x.name)),
       h("td", {}, x.errors?.length ? h("span", { class: "pill err", title: x.errors.join("\n") }, "ошибки") : h("span", { class: "pill ok" }, "OK")),
       h("td", { class: "mono small" }, x.msg_uid),
+      ORGS.exchange?.in ? h("td", { class: "small" }, !r.in?.[x.id] ? "—" : r.in[x.id].ok ? h("span", { class: "pill ok", title: r.in[x.id].path }, "в IN") : h("span", { class: "pill err", title: r.in[x.id].error }, "не в IN")) : null,
       h("td", { style: "white-space:nowrap" }, h("a", { class: "btn small", href: "/api/download?id=" + encodeURIComponent(x.id) }, ".zip"), " ",
         h("button", { class: "btn small", type: "button", onclick: () => { $("#replies").close(); switchTab("packages"); openPackage(x.id); } }, "Открыть")))))));
-    if (r.packages.length > 1) box.append(h("div", { class: "actions", style: "margin-top:10px" },
-      h("a", { class: "btn primary", href: "/api/download-many?ids=" + encodeURIComponent(r.packages.map(x => x.id).join(",")) }, `Скачать все ответы одним .zip`)));
+    const notIn = ORGS.exchange?.in ? r.packages.filter(x => !x.errors?.length && !r.in?.[x.id]?.ok) : [];
+    if (r.packages.length > 1 || notIn.length) box.append(h("div", { class: "actions", style: "margin-top:10px" },
+      r.packages.length > 1 ? h("a", { class: "btn primary", href: "/api/download-many?ids=" + encodeURIComponent(r.packages.map(x => x.id).join(",")) }, `Скачать все ответы одним .zip`) : null,
+      notIn.length ? h("button", { class: "btn", type: "button", onclick: async () => { await sendRepliesIn(notIn); renderReplies(); } }, `Положить в IN (${notIn.length})`) : null));
   }
 }
 async function buildReplies() {
@@ -933,12 +943,61 @@ async function buildReplies() {
       ORGS = await api("/api/orgs/save", { stand: currentStand(), org: { key: "o_" + src.guid.slice(0, 8), guid: src.guid, name: src.name || src.guid, address: RP.addr.trim() } });
     }
     RP_RESULT = await api("/api/build", { stand: currentStand(), scenario });
-  } catch (e) { RP_RESULT = { error: e.message, packages: [] }; }
+    if (RP.to_in && ORGS.exchange?.in) await sendRepliesIn(RP_RESULT.packages.filter(x => !x.errors?.length));
+  } catch (e) { RP_RESULT = { ...(RP_RESULT || { packages: [] }), error: e.message }; }
   RP_BUSY = false; await loadPackages(); renderReplies();
 }
 
+async function sendRepliesIn(list) {
+  if (!list.length) return;
+  RP_RESULT.in = RP_RESULT.in || {};
+  try { (await putIn(list.map(x => x.id))).forEach(x => RP_RESULT.in[x.id] = x); }
+  catch (e) { list.forEach(x => RP_RESULT.in[x.id] = { ok: false, error: e.message }); }
+}
+
 // ---------- вкладка «Пакеты» ----------
-let PKG_SEL = null, PKG_DETAIL = null;
+let PKG_SEL = null, PKG_DETAIL = null, OUT_DATA = null, OUT_BUSY = false;
+async function loadOut() {
+  if (!ORGS.exchange?.out) { OUT_DATA = null; return; }
+  OUT_BUSY = true;
+  try { OUT_DATA = await api("/api/exchange/out?stand=" + encodeURIComponent(currentStand())); }
+  catch (e) { OUT_DATA = { items: [], error: e.message }; }
+  OUT_BUSY = false;
+}
+function outCard() {
+  if (!ORGS.exchange?.out) return null;
+  if (!OUT_DATA && !OUT_BUSY) loadOut().then(() => TAB === "packages" && renderPackages());
+  const card = h("div", { class: "card" }, h("div", { class: "actions", style: "justify-content:space-between" },
+    h("h2", { style: "margin:0" }, `Папка OUT стенда «${ORGS.stand || ORGS.file}»`),
+    h("button", { class: "btn small", type: "button", onclick: async () => { await loadOut(); renderPackages(); } }, "Обновить")),
+    h("div", { class: "small muted mono", style: "margin:4px 0 8px" }, ORGS.exchange.out));
+  if (!OUT_DATA) { card.append(h("div", { class: "empty" }, "Чтение папки…")); return card; }
+  if (OUT_DATA.error) { card.append(h("div", { class: "msg err small" }, OUT_DATA.error)); return card; }
+  if (!OUT_DATA.items.length) { card.append(h("div", { class: "empty" }, "В OUT нет пакетов")); return card; }
+  card.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Изменён"), h("th", {}, "Формат"), h("th", {}, "От → кому"), h("th", {}, "Документ"), h("th", {}))),
+    h("tbody", {}, ...OUT_DATA.items.map(x => h("tr", {},
+      h("td", { class: "small" }, new Date(x.mtime * 1000).toLocaleString("ru-RU"), h("div", { class: "small muted mono" }, x.name)),
+      h("td", {}, x.format || "?"),
+      h("td", { class: "small" }, x.error ? h("span", { style: "color:var(--err)" }, "не читается: " + x.error) : (x.from?.name || "—") + " → " + ((x.to || []).map(o => o.name).join(", ") || "—")),
+      h("td", { class: "small" }, x.reg_number ? `№${x.reg_number} от ${x.reg_date || ""}` : ""),
+      h("td", {}, h("button", { class: "btn small primary", type: "button", title: "Скопировать в medogen и перенести в OUTArchive", onclick: () => takeOut(x.name) }, "Забрать"))))))));
+  return card;
+}
+async function takeOut(name) {
+  try {
+    const r = await api("/api/exchange/take", { stand: currentStand(), name });
+    if (r.archive_error) toast(r.archive_error); else toast("Пакет забран и перенесён в OUTArchive");
+    await Promise.all([loadPackages(), loadOut()]);
+    const card = r.package; PKG_SEL = card.id; PKG_DETAIL = card; renderPackages();
+    if (card.from && !["receipt", "notification"].includes(card.type)) openReplies(card);
+  } catch (e) { toast("Ошибка: " + e.message); await loadOut(); renderPackages(); }
+}
+async function putIn(ids) {
+  const r = await api("/api/exchange/put", { stand: currentStand(), ids });
+  const bad = r.results.filter(x => !x.ok);
+  toast(bad.length ? `В IN: ${r.results.length - bad.length}, не положено: ${bad.length}. ${bad[0].error}` : `В IN положено пакетов: ${r.results.length}`);
+  return r.results;
+}
 const PF = { q: "", type: "", format: "" };
 function renderPackages() {
   const root = $("#tab-packages"); root.innerHTML = "";
@@ -976,7 +1035,7 @@ function renderPackages() {
     if (!confirm("Удалить пакет с диска?")) return;
     try { await api("/api/delete", { id: PKG_DETAIL.id }); PKG_SEL = null; PKG_DETAIL = null; await loadPackages(); renderPackages(); } catch (e) { toast(e.message); } } }));
   else detail.append(h("div", { class: "empty" }, "Выберите пакет в списке. При открытии пакет проверяется заново."));
-  root.append(h("div", { class: "grid" }, list, detail));
+  root.append(h("div", { class: "grid" }, h("div", {}, outCard(), list), detail));
 }
 async function uploadIncoming(files) {
   if (!files.length) return;
@@ -1073,6 +1132,24 @@ function renderOrgs() {
         catch (err) { toast(err.message); } } }, "Сохранить"),
       ORG_EDIT ? h("button", { class: "btn", type: "button", onclick: () => { ORG_EDIT = null; renderOrgs(); } }, "Отмена") : null)));
 
+  const ex = ORGS.exchange || {};
+  const xo = h("input", { value: ex.out || "", class: "mono", placeholder: "\\\\srv-sed\\MEDO\\OUT" }),
+    xa = h("input", { value: ex.archive || "", class: "mono", placeholder: "пусто — OUTArchive рядом с OUT" }),
+    xi = h("input", { value: ex.in || "", class: "mono", placeholder: "\\\\srv-sed\\MEDO\\IN" });
+  const xres = h("div", {});
+  const xsave = async () => { ORGS = await api("/api/exchange/save", { stand: currentStand(), exchange: { out: xo.value, archive: xa.value, in: xi.value } }); OUT_DATA = null; };
+  side.append(h("div", { class: "card" }, h("h2", {}, "Обмен с СЭД (папки OUT и IN)"),
+    h("div", { class: "hint", style: "margin:0 0 10px" }, "Общие папки сервера СЭД этого стенда. Из OUT пакеты забираются на вкладке «Пакеты» и переносятся в OUTArchive, ответы кладутся в IN. Доступ нужен учётной записи, под которой запущен medogen."),
+    field("OUT — исходящие СЭД", xo), field("OUTArchive — забранные пакеты", xa), field("IN — входящие для СЭД", xi),
+    h("div", { class: "actions", style: "margin-top:8px" },
+      h("button", { class: "btn primary", type: "button", onclick: async () => { try { await xsave(); toast("Сохранено"); } catch (err) { toast(err.message); } } }, "Сохранить"),
+      h("button", { class: "btn", type: "button", onclick: async () => {
+        xres.innerHTML = "";
+        try { await xsave(); const r = await api("/api/exchange/check", { stand: currentStand() });
+          xres.append(h("ul", { class: "small", style: "margin:8px 0 0;padding-left:18px" }, ...[["out", "OUT"], ["archive", "OUTArchive"], ["in", "IN"]].map(([k, t]) =>
+            h("li", {}, h("b", {}, t + ": "), r[k].ok ? h("span", { class: "pill ok" }, "доступна") : h("span", { style: "color:var(--err)" }, r[k].error)))));
+        } catch (err) { xres.append(h("div", { class: "msg err small" }, err.message)); } } }, "Проверить доступ")), xres));
+
   const sname = h("input", { placeholder: "stand_test" }), stitle = h("input", { placeholder: "Тестовый стенд 1" });
   const scopy = h("input", { type: "checkbox" });
   side.append(h("div", { class: "card" }, h("h2", {}, "Новый стенд"),
@@ -1114,7 +1191,7 @@ function currentStand() { return $("#stand").value; }
 async function setStand(file) {
   store.set("stand", file);
   fillStands(file);
-  ORGS = await api("/api/orgs?stand=" + encodeURIComponent(file));
+  ORGS = await api("/api/orgs?stand=" + encodeURIComponent(file)); OUT_DATA = null;
   S.from = ORGS.orgs.some(o => o.key === S.from) || GAS_PICKED[S.from] ? S.from : "";
   S.to = S.to.filter(k => ORGS.orgs.some(o => o.key === k) || GAS_PICKED[k]);
   render();
