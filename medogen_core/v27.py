@@ -1,5 +1,5 @@
 """Формат 2.7: паспорт ЭС в http://www.infpres.com/IEDMS (та же схема, что у 2.6), паспорт ТК в
-http://minsvyaz.ru/container (version 1.0). Структура как у 2.7.1, отличия — в Dialect."""
+http://minsvyaz.ru/container (version 2.7). Структура как у 2.7.1, отличия — в Dialect."""
 from . import v271
 from .common import MedoError
 
@@ -48,12 +48,12 @@ class Dialect(v271.Dialect):
     """Имена файлов по эталону «2.7. Входящее письмо»: <имя>.pdf, <имя>_<n>_SigStamp.sig/.png,
     <имя>_RegStamp.png; приложения <имя>_att<i>.<ext> и .sig."""
     ns = NS_C
-    version = "1.0"
+    version = "2.7"  # бот, показатель 3.3 (в эталонах 1.0, бот такие отклоняет)
     doc_name = "document.pdf"
     reg_stamp = "document_RegStamp.png"
     link_type = False
     sign_types = ("Утверждающая", "Визирующая")
-    container_signature = False  # в эталонах 2.7 подписи ТК нет
+    container_signature = True  # бот, показатель 3.13 (в эталонах подписи ТК нет)
 
     def sign(self, i):
         return f"document_{i + 1}_SigStamp.sig", f"document_{i + 1}_SigStamp.png"

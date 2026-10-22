@@ -106,7 +106,12 @@ class ReadOld(unittest.TestCase):
         for folder in folders:
             ver = os.path.basename(os.path.dirname(folder))
             with self.subTest(folder=os.path.basename(folder)):
-                self.assertEqual(validate.validate_folder(folder), [])
+                errors = validate.validate_folder(folder)
+                if ver == "2.7":  # эталоны 2.7 с версией ТК 1.0: бот (показатель 3.3) ждёт 2.7
+                    self.assertEqual(len(errors), 1, errors)
+                    self.assertIn("ожидается 2.7", errors[0])
+                else:
+                    self.assertEqual(errors, [])
                 info = read_package(folder)
                 self.assertEqual(info["format"], ver)
                 for key in ("msg_uid", "doc_number", "doc_date", "doc_uid"):
@@ -182,7 +187,12 @@ class Build27(unittest.TestCase):
             names = set(z.namelist())
             p = ET.fromstring(z.read("passport.xml").lstrip(b"\xef\xbb\xbf"))
         self.assertEqual(p.tag, NS_C + "container")
-        self.assertEqual(p.get(NS_C + "version"), "1.0")
+        # бот, показатель 3.3: для ТК 2.7 ожидается версия 2.7 (в эталонах 1.0 — бот их отклоняет)
+        self.assertEqual(p.get(NS_C + "version"), "2.7")
+        # бот, показатель 3.13: подпись ТК обязательна для целостности
+        sig = p.find(NS_C + "containerSignature")
+        self.assertIsNotNone(sig)
+        self.assertIn(sig.get(NS_C + "localName"), names)
         self.assertTrue({"passport.xml", "document.pdf", "document_1_SigStamp.sig", "document_1_SigStamp.png",
                          "document_RegStamp.png", "document_att1.pdf", "document_att2.pdf",
                          "document_att2.sig"} <= names, names)

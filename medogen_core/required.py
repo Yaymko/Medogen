@@ -275,7 +275,7 @@ def container_271(root, label, errors, msg, q=C27, version="2.7.1"):
 
 
 def container_27(root, label, errors, msg):
-    container_271(root, label, errors, msg, q=C_OLD, version="1.0")
+    container_271(root, label, errors, msg, q=C_OLD, version="2.7")
 
 
 def check_gas(msg, addresses, gas, warnings):
