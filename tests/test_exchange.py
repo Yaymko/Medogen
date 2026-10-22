@@ -144,5 +144,84 @@ class ExchangeModule(unittest.TestCase):
         self.assertIsNone(exchange.paths({"exchange": {"out": "", "in": ""}}))
 
 
+class AppExchange(unittest.TestCase):
+    """Методы интерфейса: пути из стенда, забор в _incoming, запись в IN с отметкой в манифесте."""
+
+    def setUp(self):
+        from medogen_core import webui
+        self.box = tempfile.TemporaryDirectory()
+        b = self.box.name
+        self.root = os.path.join(b, "root")
+        os.makedirs(os.path.join(self.root, "orgs"))
+        shutil.copy(DEFAULT_ORGS, os.path.join(self.root, "orgs", "default.json"))
+        self.out, self.inn = os.path.join(b, "OUT"), os.path.join(b, "IN")
+        for d in (self.out, self.inn):
+            os.makedirs(d)
+        self.app = webui.App(self.root)
+        self.app.exchange_save({"stand": "default.json", "exchange": {"out": self.out, "in": self.inn}})
+
+    def tearDown(self):
+        self.box.cleanup()
+
+    def build(self):
+        r = self.app.build({"stand": "default.json", "scenario": {
+            "format": "3.0", "type": "document", "from": "pravit_mo", "to": ["mo_duma"]}})
+        self.assertIsNone(r["error"], r.get("log"))
+        return r["packages"][0]
+
+    def test_save_org_keeps_exchange(self):
+        self.app.save_org({"stand": "default.json", "org": {
+            "key": "new_org", "guid": "11111111-2222-3333-4444-555555555555", "name": "Новая", "address": "NEW~MEDOGU"}})
+        with open(os.path.join(self.root, "orgs", "default.json"), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["exchange"]["out"], self.out)
+        self.assertEqual(self.app.orgs("default.json")["exchange"]["in"], self.inn)
+
+    def test_take_puts_card_in_incoming(self):
+        card = self.build()
+        name = os.path.basename(card["folder"])
+        shutil.copytree(card["folder"], os.path.join(self.out, name))
+        items = self.app.exchange_out("default.json")
+        self.assertIsNone(items["error"])
+        self.assertEqual([i["name"] for i in items["items"]], [name])
+        r = self.app.exchange_take({"stand": "default.json", "name": name})
+        self.assertTrue(r["package"]["id"].startswith("_incoming/"))
+        self.assertTrue(os.path.isdir(r["archived"]))
+        self.assertEqual(self.app.exchange_out("default.json")["items"], [])
+
+    def test_put_refuses_incoming_and_invalid(self):
+        card = self.build()
+        name = os.path.basename(card["folder"])
+        shutil.copytree(card["folder"], os.path.join(self.out, name))
+        incoming = self.app.exchange_take({"stand": "default.json", "name": name})["package"]
+        bad = self.build()
+        env = os.path.join(bad["folder"], "envelope.ini")
+        with open(env, encoding="cp1251") as f:
+            text = f.read()
+        with open(env, "w", encoding="cp1251") as f:
+            f.write(text.replace("[ФАЙЛЫ]", "[ПРОЧЕЕ]"))
+        res = self.app.exchange_put({"stand": "default.json", "ids": [incoming["id"], bad["id"]]})["results"]
+        self.assertEqual([x["ok"] for x in res], [False, False])
+        self.assertIn("ошибки проверки", res[1]["error"])
+        self.assertEqual(os.listdir(self.inn), [])
+
+    def test_put_records_sent_in(self):
+        card = self.build()
+        res = self.app.exchange_put({"stand": "default.json", "ids": [card["id"]]})["results"]
+        self.assertTrue(res[0]["ok"], res)
+        target = os.path.join(self.inn, os.path.basename(card["folder"]))
+        self.assertEqual(res[0]["path"], target)
+        again = self.app.package_card(card["folder"], with_errors=False)
+        self.assertEqual(again["sent_in"][-1]["path"], target)
+
+    def test_check_and_out_report_unreachable(self):
+        missing = os.path.join(self.box.name, "no-such-share", "OUT")
+        self.app.exchange_save({"stand": "default.json", "exchange": {"out": missing, "in": self.inn}})
+        chk = self.app.exchange_check({"stand": "default.json"})
+        self.assertFalse(chk["out"]["ok"])
+        self.assertTrue(chk["in"]["ok"], chk)
+        self.assertEqual([n for n in os.listdir(self.inn)], [])  # пробный файл удалён
+        self.assertIn("нет доступа", self.app.exchange_out("default.json")["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

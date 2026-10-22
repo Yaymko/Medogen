@@ -72,7 +72,8 @@ def take(out_dir, archive_dir, name, dest_dir):
     except OSError as e:
         raise MedoError(f"не удалось скопировать пакет {name}: {e}")
     try:
-        os.makedirs(archive_dir, exist_ok=True)
+        if not os.path.isdir(archive_dir):
+            os.mkdir(archive_dir)
         archived = _free_name(os.path.join(archive_dir, name))
         shutil.move(src, archived)
     except OSError as e:
@@ -89,7 +90,7 @@ def put_in(package_dir, in_dir):
     tmp = os.path.join(in_dir, f".{name}.medogen-tmp")
     try:
         shutil.rmtree(tmp, ignore_errors=True)
-        shutil.copytree(package_dir, tmp)
+        shutil.copytree(package_dir, tmp, ignore=shutil.ignore_patterns("manifest.json"))
         os.rename(tmp, target)
     except OSError as e:
         shutil.rmtree(tmp, ignore_errors=True)

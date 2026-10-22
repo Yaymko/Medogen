@@ -21,7 +21,7 @@ import webbrowser
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import builder, digital, gas, importer, v271, validate
+from . import builder, digital, exchange, gas, importer, v271, validate
 from .common import (CLASSES, KINDS, PLACES, RECEIPT_REASONS, REFUSAL_REASONS, WARNINGS,
                      Directory, MedoError, load_json, safe_dir_name)
 from .reply import read_package
@@ -107,7 +107,7 @@ class App:
         path = self.stand_path(stand)
         data = load_json(path) if os.path.isfile(path) else {"orgs": {}}
         return {"file": os.path.basename(path), "stand": data.get("stand", ""),
-                "self": data.get("self"),
+                "self": data.get("self"), "exchange": data.get("exchange") or {},
                 "orgs": [{"key": k, **v} for k, v in (data.get("orgs") or {}).items()]}
 
     def save_org(self, body):
@@ -182,6 +182,8 @@ class App:
             f.write("{\n")
             f.write(f'  "stand": {json.dumps(data.get("stand", ""), ensure_ascii=False)},\n')
             f.write(f'  "self": {json.dumps(data.get("self"), ensure_ascii=False)},\n')
+            if data.get("exchange"):
+                f.write(f'  "exchange": {json.dumps(data["exchange"], ensure_ascii=False)},\n')
             f.write('  "orgs": {')
             items = list((data.get("orgs") or {}).items())
             for i, (k, v) in enumerate(items):
@@ -346,6 +348,90 @@ class App:
                         z.write(p, f"{os.path.basename(folder)}/{name}")
         return f"ответы_{_stamp()}.zip", buf.getvalue()
 
+    # --- обмен с СЭД через папки OUT / OUTArchive / IN ------------------------------------
+
+    def _exchange_paths(self, stand):
+        path = self.stand_path(stand)
+        p = exchange.paths(load_json(path) if os.path.isfile(path) else {})
+        if not p:
+            raise MedoError("для стенда не заданы папки обмена с СЭД (вкладка «Организации»)")
+        return p
+
+    def exchange_save(self, body):
+        path = self.stand_path(body.get("stand"))
+        data = load_json(path) if os.path.isfile(path) else {"stand": "", "self": None, "orgs": {}}
+        ex = body.get("exchange") or {}
+        data["exchange"] = {k: (ex.get(k) or "").strip() for k in ("out", "archive", "in")}
+        self._write_json(path, data)
+        return self.orgs(os.path.basename(path))
+
+    def exchange_check(self, body):
+        p = self._exchange_paths(body.get("stand"))
+        res = {}
+        with LOCK:
+            for key in ("out", "archive", "in"):
+                folder = p[key]
+                if not folder:
+                    res[key] = {"ok": False, "error": "путь не задан"}
+                    continue
+                try:
+                    if key == "out":
+                        os.listdir(folder)
+                    else:
+                        if key == "archive" and not os.path.isdir(folder):
+                            os.mkdir(folder)  # только сам архив, без несуществующих родителей
+                        probe = os.path.join(folder, f".medogen-probe-{uuid.uuid4().hex[:8]}.tmp")
+                        with open(probe, "w") as f:
+                            f.write("medogen")
+                        os.remove(probe)
+                    res[key] = {"ok": True, "path": folder}
+                except OSError as e:
+                    res[key] = {"ok": False, "path": folder, "error": f"нет доступа к {folder}: {e}"}
+        return res
+
+    def exchange_out(self, stand):
+        p = self._exchange_paths(stand)
+        try:
+            return {"out": p["out"], "items": exchange.list_out(p["out"]), "error": None}
+        except MedoError as e:
+            return {"out": p["out"], "items": [], "error": str(e)}
+
+    def exchange_take(self, body):
+        p = self._exchange_paths(body.get("stand"))
+        name = body.get("name") or ""
+        with LOCK:
+            dest = os.path.join(self.incoming, safe_dir_name(f"{_stamp()}_{name}"))
+            copy, archived, err = exchange.take(p["out"], p["archive"], name, dest)
+        return {"package": self.package_card(self._find_package_root(copy)),
+                "archived": archived, "archive_error": err}
+
+    def exchange_put(self, body):
+        p = self._exchange_paths(body.get("stand"))
+        if not p["in"]:
+            raise MedoError("для стенда не задана папка IN")
+        results = []
+        for pid in body.get("ids") or []:
+            item = {"id": pid, "ok": False}
+            try:
+                if pid.startswith("_incoming/"):
+                    raise MedoError("входящий пакет в IN не кладётся")
+                folder = self.pkg_path(pid)
+                if validate.validate_folder(folder, []):
+                    raise MedoError("в пакете ошибки проверки, в IN не положен")
+                with LOCK:
+                    item["path"] = exchange.put_in(folder, p["in"])
+                    mpath = builder.manifest_path(folder)
+                    man = load_json(mpath) if os.path.isfile(mpath) else {}
+                    man.setdefault("sent_in", []).append(
+                        {"at": dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "path": item["path"]})
+                    with open(mpath, "w", encoding="utf-8") as f:
+                        json.dump(man, f, ensure_ascii=False, indent=2)
+                item["ok"] = True
+            except MedoError as e:
+                item["error"] = str(e)
+            results.append(item)
+        return {"results": results}
+
     # --- сборка ---------------------------------------------------------------------------
 
     def _fix_refs(self, spec):
@@ -459,6 +545,8 @@ def make_handler(app):
                 return self._send(200, app.orgs(q.get("stand")))
             if path == "/api/packages":
                 return self._send(200, app.packages())
+            if path == "/api/exchange/out":
+                return self._send(200, app.exchange_out(q.get("stand")))
             if path == "/api/gas":
                 return self._send(200, app.gas_search(q.get("q", "")))
             if path == "/api/package":
@@ -498,6 +586,10 @@ def make_handler(app):
                 "/api/orgs/new": app.new_stand,
                 "/api/orgs/import": app.import_orgs,
                 "/api/gas/import": app.gas_import,
+                "/api/exchange/save": app.exchange_save,
+                "/api/exchange/check": app.exchange_check,
+                "/api/exchange/take": app.exchange_take,
+                "/api/exchange/put": app.exchange_put,
             }
             if path not in routes:
                 return self._send(404, {"error": "нет такого адреса"})
