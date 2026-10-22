@@ -37,6 +37,14 @@ main { max-width: 1400px; margin: 0 auto; padding: 16px; }
 .card h2 { font-size: 15px; margin: 0 0 12px; }
 .card h3 { font-size: 13px; margin: 18px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
 .sticky { position: sticky; top: 70px; }
+.pkg-layout { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 16px; align-items: start; }
+.pkg-toc { position: sticky; top: 70px; display: flex; flex-direction: column; gap: 2px; padding: 10px; }
+.pkg-toc a { color: var(--accent); cursor: pointer; padding: 5px 6px; border-radius: 6px; font-size: 13px; }
+.pkg-toc a:hover { background: var(--accent-weak); }
+.pkg-toc .n { color: var(--muted); }
+#pkg-out, #pkg-list, #pkg-detail { scroll-margin-top: 70px; }
+.fold { cursor: pointer; user-select: none; }
+@media (max-width: 1000px) { .pkg-layout { grid-template-columns: 1fr; } .pkg-toc { position: static; flex-direction: row; flex-wrap: wrap; } }
 @media (max-width: 1000px) { header { position: static; } .sticky { position: static; } }
 label.f { display: block; margin-bottom: 10px; }
 label.f > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
@@ -970,10 +978,14 @@ async function loadOut() {
 function outCard() {
   if (!ORGS.exchange?.out) return null;
   if (!OUT_DATA && !OUT_BUSY) loadOut().then(() => TAB === "packages" && renderPackages());
-  const card = h("div", { class: "card" }, h("div", { class: "actions", style: "justify-content:space-between" },
-    h("h2", { style: "margin:0" }, `Папка OUT стенда «${ORGS.stand || ORGS.file}»`),
+  const folded = store.get("outFolded", false);
+  const n = OUT_DATA?.items ? ` (${OUT_DATA.items.length})` : "";
+  const card = h("div", { class: "card", id: "pkg-out" }, h("div", { class: "actions", style: "justify-content:space-between" },
+    h("h2", { class: "fold", style: "margin:0", title: folded ? "Развернуть" : "Свернуть",
+      onclick: () => { store.set("outFolded", !folded); renderPackages(); } }, `${folded ? "▸" : "▾"} Папка OUT стенда «${ORGS.stand || ORGS.file}»${n}`),
     h("button", { class: "btn small", type: "button", onclick: async () => { await loadOut(); renderPackages(); } }, "Обновить")),
     h("div", { class: "small muted mono", style: "margin:4px 0 8px" }, ORGS.exchange.out));
+  if (folded) return card;
   if (!OUT_DATA) { card.append(h("div", { class: "empty" }, "Чтение папки…")); return card; }
   if (OUT_DATA.error) { card.append(h("div", { class: "msg err small" }, OUT_DATA.error)); return card; }
   if (!OUT_DATA.items.length) { card.append(h("div", { class: "empty" }, "В OUT нет пакетов")); return card; }
@@ -1026,7 +1038,7 @@ function relatedView(p) {
 
 function renderPackages() {
   const root = $("#tab-packages"); root.innerHTML = "";
-  const list = h("div", { class: "card" }, h("h2", {}, "Собранные и входящие пакеты"));
+  const list = h("div", { class: "card", id: "pkg-list" }, h("h2", {}, `Собранные и входящие пакеты (${PACKAGES.length})`));
   const q = h("input", { placeholder: "Поиск: название, номер, GUID, организация", value: PF.q, oninput: () => { PF.q = q.value; fill(); } });
   const tsel = h("select", { onchange: () => { PF.type = tsel.value; fill(); } }, h("option", { value: "" }, "Все типы"),
     ...Object.entries(META.types).map(([k, v]) => h("option", { value: k, selected: PF.type === k }, v)), h("option", { value: "incoming", selected: PF.type === "incoming" }, "Входящие"));
@@ -1063,12 +1075,25 @@ function renderPackages() {
       n ? h("div", { class: "muted" }, `ответов: ${n}`) : null];
   }
   fill();
-  const detail = h("div", { class: "card sticky" }, h("h2", {}, "Пакет"));
+  const detail = h("div", { class: "card sticky", id: "pkg-detail" }, h("h2", {}, "Пакет"));
   if (PKG_DETAIL) detail.append(packageView(PKG_DETAIL, { remove: async () => {
     if (!confirm("Удалить пакет с диска?")) return;
     try { await api("/api/delete", { id: PKG_DETAIL.id }); PKG_SEL = null; PKG_DETAIL = null; await loadPackages(); renderPackages(); } catch (e) { toast(e.message); } } }));
   else detail.append(h("div", { class: "empty" }, "Выберите пакет в списке. При открытии пакет проверяется заново."));
-  root.append(h("div", { class: "grid" }, h("div", {}, outCard(), list), detail));
+  root.append(h("div", { class: "pkg-layout" }, pkgToc(), h("div", { class: "grid" }, h("div", {}, outCard(), list), detail)));
+}
+// Оглавление вкладки «Пакеты»: быстрый переход, когда в OUT много пакетов
+function pkgToc() {
+  const go = (id, before) => { if (before) before(); const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
+  const outN = OUT_DATA?.items ? OUT_DATA.items.length : null;
+  return h("nav", { class: "card pkg-toc" }, h("div", { class: "small muted", style: "padding:0 6px 4px" }, "Перейти"),
+    ORGS.exchange?.out ? h("a", { onclick: () => go("pkg-out", () => { if (store.get("outFolded", false)) { store.set("outFolded", false); renderPackages(); } }) },
+      "Папка OUT", outN === null ? null : h("span", { class: "n" }, ` (${outN})`)) : null,
+    h("a", { onclick: () => go("pkg-list") }, "Собранные и входящие", h("span", { class: "n" }, ` (${PACKAGES.length})`)),
+    PKG_DETAIL ? h("a", { onclick: () => go("pkg-detail") }, "Открытый пакет") : null,
+    ORGS.exchange?.out ? h("a", { class: "small", onclick: () => { store.set("outFolded", !store.get("outFolded", false)); renderPackages(); } },
+      store.get("outFolded", false) ? "Развернуть OUT" : "Свернуть OUT") : null,
+    h("a", { onclick: () => window.scrollTo({ top: 0, behavior: "smooth" }) }, "↑ Наверх"));
 }
 async function uploadIncoming(files) {
   if (!files.length) return;
