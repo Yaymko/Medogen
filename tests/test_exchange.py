@@ -1,4 +1,4 @@
-"""Обмен с СЭД через папки OUT, OUTArchive и IN (docs/superpowers/specs/2026-10-22-sed-exchange-folders-design.md).
+"""Обмен с СЭД через папки OUT, OUTArchiveGen и IN (docs/superpowers/specs/2026-10-22-sed-exchange-folders-design.md).
 
 Временные папки играют роль общих папок сервера СЭД, пакеты собирает сам генератор."""
 import contextlib
@@ -54,7 +54,7 @@ class ExchangeModule(unittest.TestCase):
     def setUp(self):
         self.box = tempfile.TemporaryDirectory()
         b = self.box.name
-        self.out, self.arch, self.inn, self.dest = (os.path.join(b, n) for n in ("OUT", "OUTArchive", "IN", "dest"))
+        self.out, self.arch, self.inn, self.dest = (os.path.join(b, n) for n in ("OUT", "OUTArchiveGen", "IN", "dest"))
         for d in (self.out, self.inn):
             os.makedirs(d)
 
@@ -115,7 +115,7 @@ class ExchangeModule(unittest.TestCase):
 
     def test_take_archive_failure_keeps_copy(self):
         name = self.put_out(self.p30)
-        open(os.path.join(self.box.name, "OUTArchive"), "w").close()  # архив — файл, перенос невозможен
+        open(os.path.join(self.box.name, "OUTArchiveGen"), "w").close()  # архив — файл, перенос невозможен
         copy, archived, err = exchange.take(self.out, self.arch, name, os.path.join(self.dest, "c"))
         self.assertTrue(err)
         self.assertIsNone(archived)
@@ -162,13 +162,13 @@ class ExchangeModule(unittest.TestCase):
 
     def test_default_archive_for_share_root(self):
         import ntpath
-        self.assertEqual(exchange.sibling_archive(r"\\srv\MEDO\OUT", ntpath), r"\\srv\MEDO\OUTArchive")
-        self.assertEqual(exchange.sibling_archive(r"\\srv\OUT", ntpath), r"\\srv\OUTArchive")
-        self.assertEqual(exchange.sibling_archive("D:\\MEDO\\OUT\\", ntpath), "D:\\MEDO\\OUTArchive")
+        self.assertEqual(exchange.sibling_archive(r"\\srv\MEDO\OUT", ntpath), r"\\srv\MEDO\OUTArchiveGen")
+        self.assertEqual(exchange.sibling_archive(r"\\srv\OUT", ntpath), r"\\srv\OUTArchiveGen")
+        self.assertEqual(exchange.sibling_archive("D:\\MEDO\\OUT\\", ntpath), "D:\\MEDO\\OUTArchiveGen")
 
     def test_paths_default_archive(self):
         p = exchange.paths({"exchange": {"out": "/x/OUT", "in": "/x/IN"}})
-        self.assertEqual(p["archive"], os.path.join("/x", "OUTArchive"))
+        self.assertEqual(p["archive"], os.path.join("/x", "OUTArchiveGen"))
         self.assertEqual(p["in"], "/x/IN")
         self.assertIsNone(exchange.paths({}))
         self.assertIsNone(exchange.paths({"exchange": {"out": "", "in": ""}}))

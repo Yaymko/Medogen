@@ -980,13 +980,13 @@ function outCard() {
       h("td", {}, x.format || "?"),
       h("td", { class: "small" }, x.error ? h("span", { style: "color:var(--err)" }, "не читается: " + x.error) : (x.from?.name || "—") + " → " + ((x.to || []).map(o => o.name).join(", ") || "—")),
       h("td", { class: "small" }, x.reg_number ? `№${x.reg_number} от ${x.reg_date || ""}` : ""),
-      h("td", {}, h("button", { class: "btn small primary", type: "button", title: "Скопировать в medogen и перенести в OUTArchive", onclick: () => takeOut(x.name) }, "Забрать"))))))));
+      h("td", {}, h("button", { class: "btn small primary", type: "button", title: "Скопировать в medogen и перенести в OUTArchiveGen", onclick: () => takeOut(x.name) }, "Забрать"))))))));
   return card;
 }
 async function takeOut(name) {
   try {
     const r = await api("/api/exchange/take", { stand: currentStand(), name });
-    if (r.archive_error) toast(r.archive_error); else toast("Пакет забран и перенесён в OUTArchive");
+    if (r.archive_error) toast(r.archive_error); else toast("Пакет забран и перенесён в OUTArchiveGen");
     await Promise.all([loadPackages(), loadOut()]);
     const card = r.package; PKG_SEL = card.id; PKG_DETAIL = card; renderPackages();
     if (card.from && !["receipt", "notification"].includes(card.type)) openReplies(card);
@@ -1134,19 +1134,19 @@ function renderOrgs() {
 
   const ex = ORGS.exchange || {};
   const xo = h("input", { value: ex.out || "", class: "mono", placeholder: "\\\\srv-sed\\MEDO\\OUT" }),
-    xa = h("input", { value: ex.archive || "", class: "mono", placeholder: "пусто — OUTArchive рядом с OUT" }),
+    xa = h("input", { value: ex.archive || "", class: "mono", placeholder: "пусто — OUTArchiveGen рядом с OUT" }),
     xi = h("input", { value: ex.in || "", class: "mono", placeholder: "\\\\srv-sed\\MEDO\\IN" });
   const xres = h("div", {});
   const xsave = async () => { ORGS = await api("/api/exchange/save", { stand: currentStand(), exchange: { out: xo.value, archive: xa.value, in: xi.value } }); OUT_DATA = null; };
   side.append(h("div", { class: "card" }, h("h2", {}, "Обмен с СЭД (папки OUT и IN)"),
-    h("div", { class: "hint", style: "margin:0 0 10px" }, "Общие папки сервера СЭД этого стенда. Из OUT пакеты забираются на вкладке «Пакеты» и переносятся в OUTArchive, ответы кладутся в IN. Доступ нужен учётной записи, под которой запущен medogen."),
-    field("OUT — исходящие СЭД", xo), field("OUTArchive — забранные пакеты", xa), field("IN — входящие для СЭД", xi),
+    h("div", { class: "hint", style: "margin:0 0 10px" }, "Общие папки сервера СЭД этого стенда. Из OUT пакеты забираются на вкладке «Пакеты» и переносятся в OUTArchiveGen, ответы кладутся в IN. Доступ нужен учётной записи, под которой запущен medogen."),
+    field("OUT — исходящие СЭД", xo), field("OUTArchiveGen — забранные пакеты", xa), field("IN — входящие для СЭД", xi),
     h("div", { class: "actions", style: "margin-top:8px" },
       h("button", { class: "btn primary", type: "button", onclick: async () => { try { await xsave(); toast("Сохранено"); } catch (err) { toast(err.message); } } }, "Сохранить"),
       h("button", { class: "btn", type: "button", onclick: async () => {
         xres.innerHTML = "";
         try { await xsave(); const r = await api("/api/exchange/check", { stand: currentStand() });
-          xres.append(h("ul", { class: "small", style: "margin:8px 0 0;padding-left:18px" }, ...[["out", "OUT"], ["archive", "OUTArchive"], ["in", "IN"]].map(([k, t]) =>
+          xres.append(h("ul", { class: "small", style: "margin:8px 0 0;padding-left:18px" }, ...[["out", "OUT"], ["archive", "OUTArchiveGen"], ["in", "IN"]].map(([k, t]) =>
             h("li", {}, h("b", {}, t + ": "), r[k].ok ? h("span", { class: "pill ok" }, "доступна") : h("span", { style: "color:var(--err)" }, r[k].error)))));
         } catch (err) { xres.append(h("div", { class: "msg err small" }, err.message)); } } }, "Проверить доступ")), xres));
 

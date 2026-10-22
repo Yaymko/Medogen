@@ -1,4 +1,4 @@
-"""Обмен с СЭД через общие папки: OUT (исходящие СЭД), OUTArchive (забранные), IN (входящие для СЭД).
+"""Обмен с СЭД через общие папки: OUT (исходящие СЭД), OUTArchiveGen (забранные), IN (входящие для СЭД).
 
 Пакет — подпапка с envelope.ini. Функции получают пути явно и не зависят от интерфейса."""
 import os
@@ -9,7 +9,7 @@ from .reply import read_package
 
 
 def paths(stand):
-    """Пути обмена из стенда; archive по умолчанию — OUTArchive рядом с OUT. None, если обмен не настроен."""
+    """Пути обмена из стенда; archive по умолчанию — OUTArchiveGen рядом с OUT. None, если обмен не настроен."""
     ex = (stand or {}).get("exchange") or {}
     out, inn = (ex.get("out") or "").strip(), (ex.get("in") or "").strip()
     if not out and not inn:
@@ -21,12 +21,12 @@ def paths(stand):
 
 
 def sibling_archive(out, pathmod=os.path):
-    r"""OUTArchive рядом с OUT. Если OUT — корень общей папки (\\srv\OUT), это общая папка OUTArchive."""
+    r"""OUTArchiveGen рядом с OUT. Если OUT — корень общей папки (\\srv\OUT), это общая папка OUTArchiveGen."""
     out = out.rstrip("\\/") or out
     drive, rest = pathmod.splitdrive(out)
     if drive.startswith(("\\\\", "//")) and not rest.strip("\\/"):
-        return drive + "Archive"
-    return pathmod.join(pathmod.dirname(out), "OUTArchive")
+        return drive + "ArchiveGen"
+    return pathmod.join(pathmod.dirname(out), "OUTArchiveGen")
 
 
 def _is_package(folder):

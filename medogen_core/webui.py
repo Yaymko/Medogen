@@ -349,7 +349,7 @@ class App:
                         z.write(p, f"{os.path.basename(folder)}/{name}")
         return f"ответы_{_stamp()}.zip", buf.getvalue()
 
-    # --- обмен с СЭД через папки OUT / OUTArchive / IN ------------------------------------
+    # --- обмен с СЭД через папки OUT / OUTArchiveGen / IN ------------------------------------
 
     def _exchange_paths(self, stand):
         path = self.stand_path(stand)

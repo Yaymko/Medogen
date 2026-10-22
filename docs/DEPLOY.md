@@ -110,13 +110,13 @@ netsh advfirewall firewall add rule name="medogen" dir=in action=allow protocol=
 раздел 5), к этим папкам обращается сама служба medogen, а не браузер пользователя.
 
 - **Windows.** Запускайте службу от доменной учётной записи с правами на чтение и изменение
-  OUT, OUTArchive и IN: `nssm set medogen ObjectName DOMAIN\svc-medogen <пароль>`. В стенде
+  OUT, OUTArchiveGen и IN: `nssm set medogen ObjectName DOMAIN\svc-medogen <пароль>`. В стенде
   указывайте UNC-путь (`\\srv-sed\MEDO\OUT`), а не букву сетевого диска: подключённые диски
   службе не видны.
 - **Linux.** Подключите общую папку через cifs, например в `/etc/fstab`:
   `//srv-sed/MEDO /mnt/sed cifs credentials=/etc/medogen-smb,uid=medogen,gid=medogen,iocharset=utf8 0 0`,
-  и укажите в стенде `/mnt/sed/OUT`, `/mnt/sed/OUTArchive`, `/mnt/sed/IN`.
-- Перенос из OUT в OUTArchive быстрый и надёжный, когда обе папки лежат на одном общем ресурсе.
+  и укажите в стенде `/mnt/sed/OUT`, `/mnt/sed/OUTArchiveGen`, `/mnt/sed/IN`.
+- Перенос из OUT в OUTArchiveGen быстрый и надёжный, когда обе папки лежат на одном общем ресурсе.
 - Пути задаются в стенде, а в интерфейсе нет авторизации. Закройте его прокси (раздел 4), чтобы
   посторонний не мог направить службу на другие папки.
 
