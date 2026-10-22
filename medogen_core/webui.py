@@ -235,10 +235,15 @@ class App:
                 with zipfile.ZipFile(srcs[0]) as z:
                     root = os.path.realpath(dest)
                     for m in z.infolist():
+                        if not m.flag_bits & 0x800:  # «Сжатая папка» Windows пишет имена в cp866
+                            try:
+                                m.filename = m.filename.encode("cp437").decode("cp866")
+                            except UnicodeError:
+                                pass
                         target = os.path.realpath(os.path.join(dest, m.filename))
                         if target != root and not target.startswith(root + os.sep):
                             raise MedoError(f"zip: недопустимый путь {m.filename}")
-                    z.extractall(dest)
+                    z.extractall(dest, z.infolist())
             else:  # отдельные файлы пакета: envelope.ini, message.xml, *.edc.zip ...
                 for src in srcs:
                     shutil.copy(src, os.path.join(dest, os.path.basename(src)))

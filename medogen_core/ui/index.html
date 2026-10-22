@@ -235,6 +235,7 @@ const NOTIF_30 = ["registered", "refused"];
 const fam = f => ["3.0", "2.7.1", "2.7"].includes(f) ? f : /^2\.[0-6]$/.test(f || "") ? "2.6" : f;
 const isOld = f => ["2.7", "2.6"].includes(fam(f));
 const FORMAT_LABEL = { "3.0": "3.0", "2.7.1": "2.7.1", "2.7": "2.7", "2.6": "2.6 и ниже" };
+const refusalList = f => isOld(f) ? META.refusal_reasons_old : META.refusal_reasons;
 const OLD_VERSIONS = ["2.6", "2.5", "2.4", "2.3", "2.2", "2.1", "2.0"];
 
 function orgName(guid) { const o = ORGS.orgs.find(o => o.guid === guid || o.key === guid) || GAS_PICKED[guid]; return o ? o.name : guid; }
@@ -565,6 +566,7 @@ function receiptSection() {
     ...[[true, "Принято"], [false, "Отказ в приёме"]].map(([v, t]) => h("button", { type: "button", class: S.receipt.accepted === v ? "on" : "", onclick: () => { S.receipt.accepted = v; save(); renderCreate(); } }, t))));
   if (!S.receipt.accepted) {
     if (S.format === "2.7.1") box.append(field("Код ошибки (errorCode) *", bind("receipt.error_code", { type: "number" })));
+    else if (isOld(S.format)) box.append(h("div", { class: "small muted", style: "margin-bottom:8px" }, "В 2.7 и 2.6 у квитанции об отказе нет кода и причин — укажите причину в комментарии."));
     else box.append(field("Причины отказа (приказ 611/96) *", reasonsBox("receipt.reasons", META.receipt_reasons)));
   }
   box.append(field("Комментарий", bind("receipt.comment", { tag: "textarea" })));
@@ -578,7 +580,11 @@ function notificationSection() {
     field("Вид уведомления", bind(n + "kind", { tag: "select", options: kinds.map(([k, v]) => h("option", { value: k }, v)) }, true)));
   const k = S.notification.kind;
   if (k === "registered") box.append(h("div", { class: "row" }, field("Входящий номер", bind(n + "number", { placeholder: "авто" })), field("Дата регистрации", bind(n + "date", { type: "date" }))));
-  if (k === "refused") box.append(field("Причины отказа (Cat01-004-00005) *", reasonsBox(n + "reasons", isOld(S.format) ? META.refusal_reasons_old : META.refusal_reasons)));
+  if (k === "refused") {
+    const list = refusalList(S.format);  // причины, отмеченные для другого формата, здесь не видны — снимаем их
+    S.notification.reasons = (S.notification.reasons || []).filter(id => id in list);
+    box.append(field("Причины отказа (Cat01-004-00005) *", reasonsBox(n + "reasons", list)));
+  }
   if (k === "executor_assigned") box.append(h("div", { class: "row" }, field("Секретарь", bind(n + "secretary", { placeholder: "Секретарь" })), field("Руководитель", bind(n + "manager", { placeholder: "Руководитель" })), field("Исполнитель", bind(n + "executor", { placeholder: "Исполнитель" }))));
   if (k === "report_prepared") box.append(h("div", { class: "row" }, field("Подписант доклада", bind(n + "signatory", { placeholder: "Подписант" })), field("Должность", bind(n + "signatory_post", { placeholder: "Руководитель" }))));
   if (k === "report_sent") box.append(h("div", { class: "row" }, field("Номер доклада", bind(n + "report_number", { placeholder: "авто" })), field("Дата доклада", bind(n + "report_date", { type: "date" }))));
@@ -666,7 +672,7 @@ function buildSpec() {
     const r = S.receipt; spec.receipt = { accepted: r.accepted, comment: nz(r.comment) };
     if (!r.accepted) {
       if (S.format === "2.7.1") spec.receipt.error_code = Number(r.error_code || 0);
-      else { if (!r.reasons.length) throw new Error("Отметьте хотя бы одну причину отказа"); spec.receipt.reasons = r.reasons.map(id => ({ id })); }
+      else if (!isOld(S.format)) { if (!r.reasons.length) throw new Error("Отметьте хотя бы одну причину отказа"); spec.receipt.reasons = r.reasons.map(id => ({ id })); }
     }
   }
   if (t === "notification") {
@@ -901,7 +907,8 @@ function renderReplies() {
     else if (k === "r_err") extra = p.format === "3.0"
       ? h("select", { style: "width:auto;max-width:330px", onchange: e => { RP.reason30 = e.target.value; save(); } }, ...Object.entries(META.receipt_reasons).map(([id, t]) => h("option", { value: id, selected: RP.reason30 === id }, `${id} ${t}`)))
       : h("label", { class: "actions small muted" }, "код ошибки", h("input", { type: "number", style: "width:90px", value: RP.code271, title: "errorCode", oninput: e => { RP.code271 = e.target.value; save(); } }));
-    if (k === "n_refused") extra = h("select", { style: "width:auto;max-width:330px", onchange: e => { RP.refuse = e.target.value; save(); } }, ...Object.entries(isOld(p.format) ? META.refusal_reasons_old : META.refusal_reasons).map(([id, t]) => h("option", { value: id, selected: RP.refuse === id }, `${id} ${t}`)));
+    if (k === "n_refused" && !(RP.refuse in refusalList(p.format))) RP.refuse = "205" in refusalList(p.format) ? "205" : Object.keys(refusalList(p.format))[0];
+    if (k === "n_refused") extra = h("select", { style: "width:auto;max-width:330px", onchange: e => { RP.refuse = e.target.value; save(); } }, ...Object.entries(refusalList(p.format)).map(([id, t]) => h("option", { value: id, selected: RP.refuse === id }, `${id} ${t}`)));
     if (k === "n_registered") extra = h("input", { style: "width:140px", placeholder: "вх. номер: авто", value: RP.reg_number, oninput: e => { RP.reg_number = e.target.value; save(); } });
     if (k === "d_doc") extra = h("button", { class: "btn small", type: "button", title: "Заполнить реквизиты, приложения, свой PDF",
       onclick: () => { $("#replies").close(); startReply(p, "document"); } }, "Открыть в форме…");
@@ -949,7 +956,7 @@ async function buildReplies() {
     const base = { format: p.format, reply_to: "ui:" + p.id, from: RP.from || undefined, name: (k.startsWith("r_") ? "квитанция " : "уведомление ") + label };
     if (k === "d_doc") packages.push({ ...base, name: "ответный документ", type: "document", document: {}, container: p.format === "3.0" ? "dev" : undefined });
     else if (k === "r_ok") packages.push({ ...base, type: "receipt", receipt: { accepted: true } });
-    else if (k === "r_err") packages.push({ ...base, type: "receipt", receipt: p.format === "3.0" ? { accepted: false, reasons: [{ id: RP.reason30 }] } : { accepted: false, error_code: Number(RP.code271 || 0) } });
+    else if (k === "r_err") packages.push({ ...base, type: "receipt", receipt: p.format === "3.0" ? { accepted: false, reasons: [{ id: RP.reason30 }] } : isOld(p.format) ? { accepted: false } : { accepted: false, error_code: Number(RP.code271 || 0) } });
     else {
       const kind = k.slice(2), n = { kind };
       if (kind === "registered" && RP.reg_number) n.number = RP.reg_number;

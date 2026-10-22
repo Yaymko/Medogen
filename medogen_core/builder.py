@@ -461,7 +461,8 @@ class NotificationSpec:
         self.foundation_date = f.get("date", rp.get("doc_date")) or None
         self.number = str(n.get("number") or ctx.auto_number("ВХ"))
         self.date = ctx.clock.date(n.get("date"))
-        self.reasons = [digital.refusal_reason(x) for x in n.get("reasons", ["203"])]
+        self.reasons = [(x, x) if ctx.family in OLD and isinstance(x, str) and x in v27.REFUSAL_ENUM else digital.refusal_reason(x)
+                        for x in n.get("reasons", ["203"])]
         self.secretary = n.get("secretary", {"person": "Секретарь"})
         self.manager = n.get("manager", {"person": "Руководитель"})
         self.executor = n.get("executor", {"person": "Исполнитель"})

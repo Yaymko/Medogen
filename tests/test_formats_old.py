@@ -216,6 +216,15 @@ class Build27(unittest.TestCase):
             build(self.box.name, [{"format": "2.7", "name": "n", "type": "notification", "reply_to": doc,
                                    "notification": {"kind": "refused", "reasons": ["101"]}}])
 
+    def test_refusal_reason_plain_text(self):
+        doc = self.one(type="document")
+        for text in ("Нет подписи", "Перевернуты страницы"):
+            with self.subTest(text=text):
+                folder = build(self.box.name, [{"format": "2.7", "name": "n", "type": "notification", "reply_to": doc,
+                                                "notification": {"kind": "refused", "reasons": [text]}}])["n"][0]
+                self.assertValid(folder)
+                self.assertIn(text, open(os.path.join(folder, "message.xml"), encoding="utf-8-sig").read())
+
     def test_errors(self):
         for t in ("assignment", "gosedo"):
             with self.subTest(type=t), self.assertRaisesRegex(MedoError, "только в 2.7.1 и 3.0"):
@@ -336,6 +345,30 @@ class Replies(unittest.TestCase):
         card = cards[self.app.pkg_id(folder)]
         self.assertEqual(card["format"], "2.6")
         self.assertEqual(card["reg_number"], "021")
+
+    def test_incoming_26_zip_cp866_names(self):
+        """Zip из «Сжатой папки» Windows: имена в cp866 без флага UTF-8."""
+        folder = make_26(os.path.join(self.box.name, "src"), name="Письмо.docx")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+            for n in os.listdir(folder):
+                arc = "XXXXXX.docx" if n == "Письмо.docx" else n
+                z.write(os.path.join(folder, n), arc)
+        data = buf.getvalue().replace(b"XXXXXX.docx", "Письмо.docx".encode("cp866"))
+        up = self.app.upload("пакет.zip", data)
+        card = self.app.incoming_package({"upload": up["path"]})
+        self.assertEqual(card["format"], "2.6")
+        self.assertEqual(card["errors"], [])
+
+    def test_reply_to_26_without_delivery_index(self):
+        folder = make_26(os.path.join(self.app.incoming, "in2"), delivery=False)
+        pid = self.app.pkg_id(folder)
+        for p in [{"type": "receipt", "reply_to": "ui:" + pid},
+                  {"type": "notification", "reply_to": "ui:" + pid, "notification": {"kind": "refused", "reasons": ["Нет подписи"]}},
+                  {"type": "document", "reply_to": "ui:" + pid, "document": {}}]:
+            with self.subTest(type=p["type"]):
+                r = self.build({"format": "2.6", **p})[0]
+                self.assertEqual(r["errors"], [])
 
     def test_reply_document_to_26_links(self):
         doc = self.build({"format": "2.6", "type": "document", "from": "pravit_mo", "to": ["mo_duma"]})[0]
