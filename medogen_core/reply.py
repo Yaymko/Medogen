@@ -8,6 +8,8 @@ from .common import MedoError
 
 NS = {
     "m27": "urn:IEDMS:MESSAGE",
+    "m26": "http://www.infpres.com/IEDMS",  # 2.7 и 2.6 (и ниже)
+    "c26": "http://minsvyaz.ru/container",
     "c27": "urn:IEDMS:CONTAINER",
     "m30": "urn:IEDMS:MESSAGE:3.0",
     "c30": "urn:IEDMS:CONTAINER:3.0",
@@ -35,12 +37,12 @@ def read_package(path):
     folder = path if os.path.isdir(path) else os.path.dirname(path)
     msg_path = path if os.path.isfile(path) else None
     if not msg_path:
-        for cand in ("message.xml", "container.xml", "communication.xml"):
+        for cand in ("message.xml", "container.xml", "communication.xml", "document.xml"):
             if os.path.isfile(os.path.join(folder, cand)):
                 msg_path = os.path.join(folder, cand)
                 break
     if not msg_path:
-        raise MedoError(f"reply_to: в {folder} нет message.xml / container.xml")
+        raise MedoError(f"reply_to: в {folder} нет message.xml / document.xml")
     with open(msg_path, "rb") as f:
         root = _parse(f.read())
     info = {"folder": folder, "receivers": []}
@@ -67,8 +69,23 @@ def read_package(path):
                                       "name": d.findtext("m27:organization", "", NS).strip()})
         b = root.find("m27:container/m27:body", NS)
         info["container_file"] = b.text.strip() if b is not None else None
+    elif root.tag == f"{{{NS['m26']}}}communication":
+        info["format"] = _attr(root, "version", "m26") or "2.7"
+        h = root.find("m26:header", NS)
+        info["msg_uid"] = _attr(h, "uid", "m26")
+        src = h.find("m26:source", NS)
+        info["source"] = {"guid": _attr(src, "uid", "m26"),
+                          "name": src.findtext("m26:organization", "", NS).strip()}
+        for d in root.findall("m26:deliveryIndex/m26:destination/m26:destination", NS):
+            info["receivers"].append({"guid": _attr(d, "uid", "m26"),
+                                      "name": d.findtext("m26:organization", "", NS).strip()})
+        b = root.find("m26:container/m26:body", NS)
+        info["container_file"] = b.text.strip() if b is not None else None
+        doc = root.find("m26:document", NS)
+        if doc is not None:
+            _read_document_26(doc, info)
     else:
-        raise MedoError(f"reply_to: {msg_path} не похож на паспорт ЭС 2.7.1/3.0")
+        raise MedoError(f"reply_to: {msg_path} не похож на паспорт ЭС 2.6/2.7/2.7.1/3.0")
 
     zpath = os.path.join(folder, info["container_file"]) if info.get("container_file") else None
     if zpath and os.path.isfile(zpath):
@@ -81,6 +98,15 @@ def read_package(path):
     return info
 
 
+def _read_document_26(d, info):
+    """Реквизиты документа 2.6: в document.xml, без транспортного контейнера."""
+    info["doc_uid"] = _attr(d, "uid", "m26")
+    info["doc_number"] = d.findtext("m26:num/m26:number", "", NS)
+    info["doc_date"] = d.findtext("m26:num/m26:date", "", NS)
+    info["doc_org"] = d.findtext("m26:signatories/m26:signatory/m26:organization", "", NS) or \
+        info["source"]["name"]
+
+
 def _read_passport(p, info):
     if p.tag == f"{{{NS['c30']}}}container":
         d = p.find("c30:document", NS)
@@ -90,6 +116,13 @@ def _read_passport(p, info):
         info["doc_number"] = reg.findtext("c30:number", "", NS)
         info["doc_date"] = reg.findtext("c30:date", "", NS)
         info["doc_org"] = org.findtext("c30:title", "", NS)
+    elif p.tag == f"{{{NS['c26']}}}container":
+        info["doc_uid"] = _attr(p, "uid", "c26")
+        reg = p.find("c26:authors/c26:author/c26:registration", NS)
+        org = p.find("c26:authors/c26:author/c26:organization", NS)
+        info["doc_number"] = reg.findtext("c26:number", "", NS)
+        info["doc_date"] = reg.findtext("c26:date", "", NS)
+        info["doc_org"] = org.findtext("c26:title", "", NS)
     else:
         info["doc_uid"] = _attr(p, "uid", "c27")
         reg = p.find("c27:authors/c27:author/c27:registration", NS)

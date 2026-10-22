@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- схема файла транспортного контейнера -->
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" version="1.0"
+  elementFormDefault="qualified" attributeFormDefault="qualified"
+  targetNamespace="http://minsvyaz.ru/container" xmlns="http://minsvyaz.ru/container">
+  <!-- container - корневой элемент контейнера -->
+  <xsd:element name="container">
+    <xsd:complexType>
+      <xsd:sequence>
+        <!-- requisites – основные реквизиты документа -->
+        <xsd:element name="requisites">
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="documentKind" type="qualifiedValue"/>
+              <xsd:element name="documentPlace" type="qualifiedValue" minOccurs="0"/>
+              <xsd:element name="classification" type="qualifiedValue" minOccurs="0"/>
+              <xsd:element name="annotation" type="shortText"/>
+              <xsd:element name="links" minOccurs="0" maxOccurs="1">
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="link" maxOccurs="unbounded" type="linkedDocument">
+                    </xsd:element>
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+            </xsd:sequence>
+          </xsd:complexType>
+        </xsd:element>
+        <!-- authors – авторы документа -->
+        <xsd:element name="authors">
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="author" type="issuer" maxOccurs="unbounded"> </xsd:element>
+            </xsd:sequence>
+          </xsd:complexType>
+        </xsd:element>
+        <!-- addressees – адресаты документа -->
+        <xsd:element name="addressees">
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="addressee" maxOccurs="unbounded">
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="organization" type="organization"/>
+                    <xsd:element minOccurs="0" name="department" type="qualifiedValue"/>
+                    <xsd:element name="person" minOccurs="0" maxOccurs="unbounded" type="person">
+                    </xsd:element>
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+            </xsd:sequence>
+          </xsd:complexType>
+        </xsd:element>
+        <!-- document – содержимое документа -->
+        <xsd:element name="document" type="document"> </xsd:element>
+        <!-- attachments – приложения -->
+        <xsd:element name="attachments" minOccurs="0">
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="attachment" maxOccurs="unbounded">
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="order" type="xsd:nonNegativeInteger"/>
+                    <xsd:element name="description" type="shortText" minOccurs="0"/>
+                    <xsd:element minOccurs="0" name="signature" maxOccurs="unbounded">
+                      <xsd:complexType>
+                        <xsd:attribute name="localName" type="fileName" use="required"/>
+                      </xsd:complexType>
+                    </xsd:element>
+                  </xsd:sequence>
+                  <xsd:attribute name="localName" type="fileName" use="required"/>
+                </xsd:complexType>
+              </xsd:element>
+            </xsd:sequence>
+          </xsd:complexType>
+        </xsd:element>
+        <xsd:element name="containerSignature" minOccurs="0">
+          <xsd:complexType>
+            <xsd:attribute name="localName" type="fileName" use="required"/>
+          </xsd:complexType>
+        </xsd:element>
+      </xsd:sequence>
+      <xsd:attribute name="uid" type="globalUniqueIdentifier" use="required">
+        <!--Уникальный идентификатор документа--> </xsd:attribute>
+      <xsd:attribute name="version" type="xsd:token" use="required"/>
+    </xsd:complexType>
+  </xsd:element>
+  <xsd:complexType name="stamp">
+    <!-- Комплесный тип для описания графического штампа-->
+    <xsd:sequence>
+      <xsd:element name="position" type="position"/>
+      <!-- Расположение графического штампа-->
+    </xsd:sequence>
+    <xsd:attribute name="localName" type="fileName" use="required">
+      <!-- Имя файла графического штампа в формате PNG--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:complexType name="position">
+    <xsd:sequence>
+      <xsd:element name="page" type="xsd:positiveInteger"/>
+      <xsd:element name="topLeft" type="coordinate"/>
+      <xsd:element name="dimension" type="dimension"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="coordinate">
+    <xsd:sequence>
+      <xsd:element name="x">
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:short">
+            <xsd:minInclusive value="0"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+      <xsd:element name="y">
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:short">
+            <xsd:minInclusive value="0"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="dimension">
+    <xsd:sequence>
+      <xsd:element name="w" type="xsd:positiveInteger"/>
+      <xsd:element name="h" type="xsd:positiveInteger"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="document">
+    <xsd:sequence>
+      <xsd:element name="pagesQuantity" type="xsd:positiveInteger" minOccurs="0"/>
+      <xsd:element minOccurs="0" name="enclosurePagesQuantity" type="xsd:nonNegativeInteger"/>
+      <xsd:element name="description" type="shortText" minOccurs="0"/>
+    </xsd:sequence>
+    <xsd:attribute name="localName" type="documentFileName" use="required"/>
+  </xsd:complexType>
+  <xsd:complexType name="issuer">
+    <xsd:sequence>
+      <xsd:element name="organization" type="organization"/>
+      <xsd:element minOccurs="0" name="department" type="qualifiedValue"/>
+      <xsd:element name="registration" type="registration"/>
+      <xsd:element maxOccurs="unbounded" name="sign">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="person" type="signer"/>
+            <xsd:element name="documentSignature" type="signatureInfo"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="executor" minOccurs="0" type="executor"> </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="registrationData">
+    <xsd:sequence>
+      <xsd:element name="number">
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:token">
+            <xsd:maxLength value="31"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+      <xsd:element name="date" type="xsd:date"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="registration">
+    <xsd:complexContent>
+      <xsd:extension base="registrationData">
+        <xsd:sequence>
+          <xsd:element minOccurs="1" name="registrationStamp" type="stamp"/>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="signatureInfo">
+    <xsd:sequence>
+      <xsd:element name="signatureStamp" type="stamp"/>
+    </xsd:sequence>
+    <xsd:attribute name="localName" type="fileName" use="required"/>
+    <xsd:attribute default="Утверждающая" name="type">
+      <xsd:simpleType>
+        <xsd:restriction base="xsd:normalizedString">
+          <xsd:enumeration value="Визирующая"/>
+          <xsd:enumeration value="Утверждающая"/>
+        </xsd:restriction>
+      </xsd:simpleType>
+    </xsd:attribute>
+  </xsd:complexType>
+  <xsd:simpleType name="fileName">
+    <!--Имя файла-->
+    <xsd:restriction base="xsd:normalizedString">
+      <xsd:maxLength value="255"/>
+      <xsd:minLength value="1"/>
+      <xsd:pattern value="[a-zA-Z0-9_]{1,250}.[a-zA-Z0-9]{3,4}"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="documentFileName">
+    <xsd:restriction base="fileName">
+      <xsd:pattern value="[a-zA-Z0-9_]{1,250}.pdf"/>
+      <xsd:minLength value="1"/>
+      <xsd:maxLength value="255"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:complexType name="linkedDocument">
+    <xsd:sequence>
+      <xsd:element name="organization" type="organization"/>
+      <xsd:element minOccurs="0" name="department" type="qualifiedValue"/>
+      <xsd:element name="registration" type="registrationData"> </xsd:element>
+      <xsd:element name="signer" minOccurs="0" maxOccurs="unbounded" type="employee"> </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="uid" type="globalUniqueIdentifier" use="optional">
+      <!--Уникальный идентификатор связанного документа--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:simpleType name="globalUniqueIdentifier">
+    <!--Уникальный идентификатор объекта (GUID)-->
+    <xsd:restriction base="xsd:normalizedString">
+      <xsd:pattern
+        value="[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:complexType name="organization">
+    <xsd:sequence>
+      <xsd:element name="title" type="stringValue"/>
+      <xsd:element name="address" type="stringValue" minOccurs="0"/>
+      <xsd:element name="phone" type="stringValue" minOccurs="0"/>
+      <xsd:element name="email" type="stringValue" minOccurs="0"/>
+      <xsd:element name="website" type="stringValue" minOccurs="0"/>
+    </xsd:sequence>
+    <xsd:attribute name="id" type="identityValue">
+      <!--Необязательный идентификатор--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:complexType name="person">
+    <xsd:sequence>
+      <xsd:element name="post" type="stringValue" minOccurs="0"/>
+      <xsd:element name="name" type="stringValue" minOccurs="0"/>
+      <xsd:element name="phone" type="stringValue" minOccurs="0"/>
+      <xsd:element name="email" type="stringValue" minOccurs="0"/>
+    </xsd:sequence>
+    <xsd:attribute name="id" type="identityValue">
+      <!--Необязательный идентификатор--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:complexType name="employee">
+    <xsd:complexContent>
+      <xsd:restriction base="person">
+        <xsd:sequence>
+          <xsd:element name="post" type="stringValue" minOccurs="0"/>
+          <xsd:element name="name" type="stringValue" minOccurs="1"/>
+          <xsd:element name="phone" type="stringValue" minOccurs="0"/>
+          <xsd:element name="email" type="stringValue" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="signer">
+    <xsd:complexContent>
+      <xsd:restriction base="person">
+        <xsd:sequence>
+          <xsd:element name="post" type="stringValue" minOccurs="1"/>
+          <xsd:element name="name" type="stringValue"/>
+          <xsd:element name="phone" type="stringValue" minOccurs="0"/>
+          <xsd:element name="email" type="stringValue" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="executor">
+    <xsd:complexContent>
+      <xsd:restriction base="person">
+        <xsd:sequence>
+          <xsd:element name="post" type="stringValue" minOccurs="0"/>
+          <xsd:element name="name" type="stringValue"/>
+          <xsd:element name="phone" type="stringValue" minOccurs="1"/>
+          <xsd:element name="email" type="stringValue" minOccurs="0"/>
+        </xsd:sequence>
+      </xsd:restriction>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:simpleType name="stringValue">
+    <xsd:restriction base="xsd:normalizedString">
+      <xsd:maxLength value="511"/>
+      <xsd:minLength value="1"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:complexType name="qualifiedValue">
+    <!--Строковое значение, возможно классифицированное источником сообщения-->
+    <xsd:simpleContent>
+      <xsd:extension base="stringValue">
+        <xsd:attribute name="id" type="identityValue">
+          <!--Необязательный идентификатор--> </xsd:attribute>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+  <xsd:simpleType name="identityValue">
+    <!--Идентификатор (код) объекта-->
+    <xsd:restriction base="xsd:token">
+      <xsd:minLength value="1"/>
+      <xsd:maxLength value="127"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="shortText">
+    <xsd:restriction base="xsd:string">
+      <xsd:maxLength value="4000"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+</xsd:schema>

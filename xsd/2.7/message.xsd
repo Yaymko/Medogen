@@ -1,0 +1,1056 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" version="2.7"
+  elementFormDefault="qualified" attributeFormDefault="qualified"
+  targetNamespace="http://www.infpres.com/IEDMS" xmlns="http://www.infpres.com/IEDMS">
+  <!--ревизия 03.12.2014, aba-->
+  <!--ревизия 05.05.2015, aba-->
+  <xsd:element name="communication">
+    <!--Сообщение-->
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element name="header">
+          <!--Заголовок сообщения-->
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="source" type="communicationPartner">
+                <!--Источник сообщения--> </xsd:element>
+              <xsd:element name="operator" minOccurs="0" type="qualifiedValue">
+                <!--Оператор отправки--> </xsd:element>
+              <xsd:element name="comment" minOccurs="0">
+                <!--Дополнительная информация(необязательное значение)-->
+                <xsd:simpleType>
+                  <xsd:restriction base="xsd:string">
+                    <xsd:maxLength value="2047"/>
+                    <xsd:minLength value="1"/>
+                  </xsd:restriction>
+                </xsd:simpleType>
+              </xsd:element>
+            </xsd:sequence>
+            <xsd:attribute name="type" use="required" type="messageType">
+              <!--Тип сообщения--> </xsd:attribute>
+            <xsd:attribute name="uid" type="globalUniqueIdentifier">
+              <!--Уникальный идентификатор сообщения--> </xsd:attribute>
+            <xsd:attribute name="created" type="xsd:dateTime">
+              <!--Дата.время создания сообщения--> </xsd:attribute>
+            <xsd:attribute name="cookie" type="anyValue">
+              <!--Этот атрибут должен быть проигнорирован--> </xsd:attribute>
+          </xsd:complexType>
+        </xsd:element>
+        <xsd:choice>
+          <!--В зависимости от типа заголовка, что либо из:-->
+          <xsd:sequence>
+            <xsd:element name="document" type="document">
+              <!--Атрибуты документа--> </xsd:element>
+            <xsd:element name="files">
+              <!--Список присоединенных файлов-->
+              <xsd:complexType>
+                <xsd:sequence>
+                  <xsd:element name="file" maxOccurs="unbounded" type="associatedFile" minOccurs="0"
+                  />
+                </xsd:sequence>
+                <xsd:attribute name="cookie" type="anyValue">
+                  <!--Этот атрибут должен быть проигнорирован--> </xsd:attribute>
+              </xsd:complexType>
+            </xsd:element>
+          </xsd:sequence>
+          <xsd:element name="notification" type="messageNotification">
+            <!--Уведомление--> </xsd:element>
+          <xsd:element name="acknowledgment" type="messageAcknowledgment">
+            <!--Квитанция о приеме сообщения--> </xsd:element>
+          <xsd:element name="container" type="documentContainer"/>
+        </xsd:choice>
+        <xsd:element name="deliveryIndex" minOccurs="0">
+          <!--Указатель рассылки (список адресатов, кому предназначается данное сообщение)-->
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="destination" type="deliveryDestination" maxOccurs="unbounded"/>
+            </xsd:sequence>
+            <xsd:attribute name="cookie" type="anyValue">
+              <!--Этот атрибут должен быть проигнорирован--> </xsd:attribute>
+          </xsd:complexType>
+        </xsd:element>
+      </xsd:sequence>
+      <xsd:attribute name="version" type="xsd:token" use="required">
+        <!--Версия (версия XML схемы сообщения)--> </xsd:attribute>
+    </xsd:complexType>
+  </xsd:element>
+  <xsd:element name="environment">
+    <!--Окружение (служебная информация Шлюза МЭДО)-->
+    <xsd:complexType>
+      <xsd:sequence>
+        <xsd:element name="clients" minOccurs="0">
+          <xsd:complexType>
+            <xsd:sequence>
+              <xsd:element name="client" minOccurs="1" maxOccurs="unbounded">
+                <!--Атрибуты контрагента-->
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="uniqueId" type="globalUniqueIdentifier">
+                      <!--Уникальный идентификатор--> </xsd:element>
+                    <xsd:element name="localId" type="identityValue" minOccurs="0">
+                      <!--Зарезервировано: локальный идентификатор--> </xsd:element>
+                    <xsd:element name="value" type="stringValue">
+                      <!--Наименование--> </xsd:element>
+                    <xsd:element name="comment" nillable="true" type="stringValue" minOccurs="0">
+                      <!--Комментарий--> </xsd:element>
+                    <xsd:element name="departId" minOccurs="0" type="identityValue">
+                      <!--Зарезервировано--> </xsd:element>
+                    <xsd:element name="organization" minOccurs="0">
+                      <!--Организация-->
+                      <xsd:complexType>
+                        <xsd:sequence>
+                          <xsd:element name="shortName" type="stringValue">
+                            <!--Краткое наименование--> </xsd:element>
+                          <xsd:element name="fullName" type="stringValue" minOccurs="0">
+                            <!--Полное наименование--> </xsd:element>
+                        </xsd:sequence>
+                        <xsd:attribute name="id" type="identityValue">
+                          <!--Локальный идентификатор--> </xsd:attribute>
+                      </xsd:complexType>
+                    </xsd:element>
+                    <xsd:element name="startDate" type="xsd:dateTime" minOccurs="0" nillable="true">
+                      <!--Дата начала выгрузки/загрузки--> </xsd:element>
+                    <xsd:element name="paperless" type="xsd:boolean" minOccurs="0">
+                      <!--Признак безбумажного обмена--> </xsd:element>
+                    <xsd:element name="mail">
+                      <xsd:simpleType>
+                        <xsd:restriction base="xsd:normalizedString">
+                          <xsd:maxLength value="127"/>
+                        </xsd:restriction>
+                      </xsd:simpleType>
+                      <!--Адрес электронной почты-->
+                    </xsd:element>
+                    <xsd:element name="retro" type="xsd:boolean">
+                      <!--Признак ретроспективы--> </xsd:element>
+                    <xsd:element name="modified" type="xsd:dateTime">
+                      <!--Дата модификации--> </xsd:element>
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+            </xsd:sequence>
+          </xsd:complexType>
+          <!--Список конрагентов МЭДО-->
+        </xsd:element>
+        <xsd:element name="comment" minOccurs="0">
+          <!--Дополнительная информация(необязательное значение)-->
+          <xsd:simpleType>
+            <xsd:restriction base="xsd:string">
+              <xsd:maxLength value="2047"/>
+              <xsd:minLength value="1"/>
+            </xsd:restriction>
+          </xsd:simpleType>
+        </xsd:element>
+      </xsd:sequence>
+      <xsd:attribute name="version" type="anyValue">
+        <!--Необязательная идентификации версии--> </xsd:attribute>
+      <xsd:attribute name="source" type="anyValue">
+        <!--Необязательная идентификация источника--> </xsd:attribute>
+      <xsd:attribute name="created" type="xsd:dateTime">
+        <!--Дата генерации--> </xsd:attribute>
+      <xsd:attribute name="cookie" type="anyValue">
+        <!--Этот атрибут должен быть проигнорирован--> </xsd:attribute>
+    </xsd:complexType>
+  </xsd:element>
+  <xsd:simpleType name="messageType">
+    <!--Перечисление допустимых видов сообщений. Каждый вид определяет допустимый набор элементов в сообщении-->
+    <xsd:restriction base="xsd:token">
+      <xsd:enumeration value="Документ">
+        <!--Сообщение содержит атрибутику документа--> </xsd:enumeration>
+      <xsd:enumeration value="Уведомление">
+        <!--Сообщение информирует пользователей СЭД АП РФ о ходе процесса прохождения документа в ФОИВ  (в пилотном проекте не используется)--> </xsd:enumeration>
+      <xsd:enumeration value="Квитанция">
+        <!--Подтверждение о приеме сообщения--> </xsd:enumeration>
+      <xsd:enumeration value="Транспортный контейнер">
+        <!--Транспортный контейнер документа в электронном виде--> </xsd:enumeration>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="identityValue">
+    <!--Идентификатор (код) объекта-->
+    <xsd:restriction base="xsd:token">
+      <xsd:minLength value="1"/>
+      <xsd:maxLength value="127"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="stringValue">
+    <xsd:restriction base="xsd:normalizedString">
+      <xsd:maxLength value="511"/>
+      <xsd:minLength value="1"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="anyValue">
+    <!--Некоторое значение-->
+    <xsd:restriction base="xsd:string">
+      <xsd:minLength value="1"/>
+      <xsd:maxLength value="255"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="shortText">
+    <xsd:restriction base="xsd:string">
+      <xsd:maxLength value="4000"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="globalUniqueIdentifier">
+    <!--Уникальный идентификатор объекта (GUID)-->
+    <xsd:restriction base="xsd:token">
+      <xsd:pattern
+        value="[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:attributeGroup name="qualifiedItemAttrs">
+    <!--Набор атрибутов для значения (объекта), возможно классифицированное источником сообщения-->
+    <xsd:attribute name="id" type="identityValue">
+      <!--Необязательный идентификатор--> </xsd:attribute>
+    <xsd:attribute name="retro" type="xsd:boolean">
+      <!--Необязательный признак ретроактивности--> </xsd:attribute>
+    <xsd:attribute name="modified" type="xsd:dateTime">
+      <!--Необязательная дата последнего изменения значения--> </xsd:attribute>
+  </xsd:attributeGroup>
+  <xsd:complexType name="qualifiedValue">
+    <!--Строковое значение, возможно классифицированное источником сообщения-->
+    <xsd:simpleContent>
+      <xsd:extension base="stringValue">
+        <xsd:attributeGroup ref="qualifiedItemAttrs"/>
+      </xsd:extension>
+    </xsd:simpleContent>
+  </xsd:complexType>
+  <xsd:complexType name="communicationPartner">
+    <!--Описание организации и её СЭД, участвующих в системе МЭДО-->
+    <xsd:sequence>
+      <xsd:element name="organization">
+        <!--Наименование организации-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:normalizedString">
+            <xsd:maxLength value="511"/>
+            <xsd:minLength value="1"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+      <xsd:element name="comment" minOccurs="0">
+        <!--Дополнительные данные о СЭД (необязательное значение)-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:maxLength value="2047"/>
+            <xsd:minLength value="1"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="uid" use="required" type="globalUniqueIdentifier">
+      <!--Обязательный уникальный идентификатор контрагента МЭДО--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:complexType name="documentNumber">
+    <!--Номер и дата документа-->
+    <xsd:sequence>
+      <xsd:element name="number">
+        <!--Номер документа-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:token">
+            <xsd:maxLength value="31"/>
+            <xsd:minLength value="1"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+      <xsd:element name="date" type="xsd:date" nillable="true" minOccurs="0">
+        <!--Дата документа--> </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="anyone">
+    <xsd:sequence>
+      <xsd:element name="region" type="qualifiedValue" minOccurs="0">
+        <!--Регион--> </xsd:element>
+      <xsd:element name="organization" type="qualifiedValue" minOccurs="0">
+        <!--Организация--> </xsd:element>
+      <xsd:element name="person" type="qualifiedValue" minOccurs="0">
+        <!--Фамилия, имя отчество--> </xsd:element>
+      <xsd:element name="department" minOccurs="0" type="qualifiedValue">
+        <!--Наименование подразделения  (необязательное значение)--> </xsd:element>
+      <xsd:element name="post" minOccurs="0" type="qualifiedValue">
+        <!--Наименование должности (необязательное значение)--> </xsd:element>
+      <xsd:element name="contactInfo" minOccurs="0">
+        <!--Контактная информация (телефоны и т.п.)-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:minLength value="1"/>
+            <xsd:maxLength value="511"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="addressee">
+    <!--Представление адресата (исполнителя)-->
+    <xsd:complexContent>
+      <xsd:extension base="anyone">
+        <xsd:sequence>
+          <xsd:element name="comment" minOccurs="0">
+            <!--Необязательный комментарий-->
+            <xsd:simpleType>
+              <xsd:restriction base="xsd:string">
+                <xsd:minLength value="1"/>
+                <xsd:maxLength value="2047"/>
+              </xsd:restriction>
+            </xsd:simpleType>
+          </xsd:element>
+        </xsd:sequence>
+        <xsd:attribute name="uid" type="globalUniqueIdentifier">
+          <!--Необязательный уникальный идентификатор контрагента МЭДО--> </xsd:attribute>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="addresseeList">
+    <!--Список адресатов (исполнителей)-->
+    <xsd:sequence>
+      <xsd:element name="name" maxOccurs="1">
+        <!--Наименование-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:normalizedString">
+            <xsd:maxLength value="250"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+      <xsd:element name="contents">
+        <!--Содержимое списка-->
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="addressee" maxOccurs="unbounded" type="addressee"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="id" type="identityValue"/>
+  </xsd:complexType>
+  <xsd:complexType name="correspondent">
+    <!--Представление корреспондента-->
+    <xsd:complexContent>
+      <xsd:extension base="anyone">
+        <xsd:sequence>
+          <xsd:element name="num" type="documentNumber" minOccurs="0">
+            <!--Номер и дата документа--> </xsd:element>
+          <xsd:element name="comment" minOccurs="0">
+            <!--Необязательный комментарий-->
+            <xsd:simpleType>
+              <xsd:restriction base="xsd:string">
+                <xsd:minLength value="1"/>
+                <xsd:maxLength value="2047"/>
+              </xsd:restriction>
+            </xsd:simpleType>
+          </xsd:element>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="enclosure">
+    <!--Представление приложения к документу-->
+    <xsd:sequence>
+      <xsd:element name="title" type="shortText">
+        <!--Наименование приложения (например: краткое содержание)--> </xsd:element>
+      <xsd:element name="reference" minOccurs="0" type="documentReference">
+        <!--Краткая информация о документе--> </xsd:element>
+      <xsd:element name="pages" type="xsd:nonNegativeInteger">
+        <!--Листов приложения--> </xsd:element>
+      <xsd:element name="files" minOccurs="0" type="listOfFileLocalId">
+        <!--Список "локальных" идентификаторов файлов, содержащих текст приложения (необязательное значение)--> </xsd:element>
+      <xsd:element name="enclosures" minOccurs="0">
+        <!--Вложенные приложения (необязательный элемент, предназначен для описания "иерархии" приложений)-->
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="enclosure" minOccurs="1" maxOccurs="unbounded" type="enclosure"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="comment" minOccurs="0">
+        <!--Дополнительная информация (какие -либо комментарии,  необязательное значение)-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:maxLength value="2047"/>
+            <xsd:minLength value="1"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="uid" type="globalUniqueIdentifier">
+      <!--Необязательный уникальный идентификатор приложения в БД источника--> </xsd:attribute>
+    <xsd:attribute name="id" type="identityValue">
+      <!--Необязательный локальный идентификатор приложения в БД источника--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:simpleType name="linkType">
+    <!--Тип связи документов (перечисление может уточняться)-->
+    <xsd:restriction base="xsd:token">
+      <xsd:enumeration value="В ответ на"/>
+      <xsd:enumeration value="Во исполнение"/>
+      <xsd:enumeration value="Документ-основание"/>
+      <xsd:enumeration value="На №"/>
+      <xsd:enumeration value="Ответ"/>
+      <xsd:enumeration value="Связан с"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:complexType name="documentReference">
+    <!--Сыылка на некоторый документ (обязательный номер документа + информация о корреспонденте - организация и подписавший)-->
+    <xsd:sequence>
+      <xsd:element name="region" type="qualifiedValue" minOccurs="0">
+        <!--Регион--> </xsd:element>
+      <xsd:element name="organization" type="qualifiedValue" minOccurs="0">
+        <!--Организация--> </xsd:element>
+      <xsd:element name="person" type="qualifiedValue" minOccurs="0">
+        <!--Фамилия, имя отчество--> </xsd:element>
+      <xsd:element name="department" minOccurs="0" type="qualifiedValue">
+        <!--Наименование подразделения  (необязательное значение)--> </xsd:element>
+      <xsd:element name="post" minOccurs="0" type="qualifiedValue">
+        <!--Наименование должности (необязательное значение)--> </xsd:element>
+      <xsd:element name="num" type="documentNumber" minOccurs="1">
+        <!--Номер документа--> </xsd:element>
+      <xsd:element name="comment" minOccurs="0">
+        <!--Дополнительная информация (какие -либо комментарии,  необязательное значение)-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:minLength value="1"/>
+            <xsd:maxLength value="2047"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="linkedDocument">
+    <!--Представление для связанного документа-->
+    <xsd:sequence>
+      <xsd:element name="linkType" type="linkType" default="Связан с">
+        <!--Тип связи--> </xsd:element>
+      <xsd:choice>
+        <xsd:element name="document">
+          <!--Атрибуты документа-->
+          <xsd:complexType>
+            <!--Атрибутика документа-->
+            <xsd:sequence>
+              <xsd:element name="kind" type="qualifiedValue" minOccurs="0">
+                <!--Вид документа (необязательное значение)--> </xsd:element>
+              <xsd:element name="num" type="documentNumber">
+                <!--Номер и дата документа--> </xsd:element>
+              <xsd:element name="classification" type="qualifiedValue" minOccurs="0">
+                <!--Гриф секретности--> </xsd:element>
+              <xsd:element name="signatories">
+                <!--Подписавшие-->
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="signatory" maxOccurs="unbounded" type="signatory"/>
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+              <xsd:element name="addressees">
+                <!--Адресаты документа (кому направлено)-->
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="addressee" type="addressee" maxOccurs="unbounded"/>
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+              <xsd:element name="pages" type="xsd:nonNegativeInteger">
+                <!--Листов документа--> </xsd:element>
+              <xsd:element name="enclosuresPages" type="xsd:nonNegativeInteger" minOccurs="0">
+                <!--Листов приложений (необязательное значение)--> </xsd:element>
+              <xsd:element name="annotation" type="shortText" nillable="true" minOccurs="1">
+                <!--Аннотация, иначе - краткое содержание  (необязательное значение)--> </xsd:element>
+              <xsd:element name="enclosures" minOccurs="0">
+                <!--Приложения к документу-->
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="enclosure" type="enclosure" maxOccurs="unbounded"/>
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+              <xsd:element name="correspondents" minOccurs="0">
+                <!--Корреспонденты (необязательное значение)-->
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="correspondent" maxOccurs="unbounded" minOccurs="0"
+                      type="correspondent"/>
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+              <xsd:element name="links" minOccurs="0">
+                <!--Связанные документы (необязательное значение)-->
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="link" type="linkedDocument" maxOccurs="unbounded"/>
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+              <xsd:element name="clauses" minOccurs="0">
+                <!--Пункты документа (необязательное значение)-->
+                <xsd:complexType>
+                  <xsd:sequence>
+                    <xsd:element name="clause" type="documentClause" maxOccurs="unbounded"/>
+                  </xsd:sequence>
+                </xsd:complexType>
+              </xsd:element>
+              <xsd:element name="comment" minOccurs="0">
+                <!--Дополнительная информация (какие -либо комментарии,  необязательное значение)-->
+                <xsd:simpleType>
+                  <xsd:restriction base="xsd:string">
+                    <xsd:maxLength value="2047"/>
+                    <xsd:minLength value="1"/>
+                  </xsd:restriction>
+                </xsd:simpleType>
+              </xsd:element>
+            </xsd:sequence>
+          </xsd:complexType>
+        </xsd:element>
+        <xsd:element name="reference" type="documentReference">
+          <!--Ссылка на документ--> </xsd:element>
+      </xsd:choice>
+    </xsd:sequence>
+    <xsd:attribute name="uid" type="globalUniqueIdentifier">
+      <!--Уникальный идентификатор связанного документа (если есть)--> </xsd:attribute>
+    <xsd:attribute name="id" type="identityValue">
+      <!--Необязательный локальный идентификатор документа в БД источника--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:complexType name="documentClause">
+    <!--Пункт документа-->
+    <xsd:sequence>
+      <xsd:element name="designation" nillable="true" minOccurs="0">
+        <!--Наименование пункта (необязательное значение)-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:normalizedString">
+            <xsd:maxLength value="255"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+      <xsd:element name="text" type="shortText" minOccurs="0">
+        <!--Содержание пункта (необязательное значение)--> </xsd:element>
+      <xsd:element name="deadline" type="xsd:date" minOccurs="0">
+        <!--Срок исполнения (необязательное значение)--> </xsd:element>
+      <xsd:choice minOccurs="0">
+        <!--Ответственный исполнитель по пункту документа-->
+        <xsd:element name="principal" type="addressee">
+          <!--Исполнитель--> </xsd:element>
+        <xsd:element name="principals" type="addresseeList">
+          <!--Список исполнителей--> </xsd:element>
+      </xsd:choice>
+      <xsd:element name="parcipants" minOccurs="0">
+        <!--Соисполнители (необязательное значение)-->
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:choice minOccurs="1" maxOccurs="unbounded">
+              <xsd:element name="parcipant" type="addressee">
+                <!--Соисполнитель--> </xsd:element>
+              <xsd:element name="parcipants" type="addresseeList">
+                <!--Список соисполнителей--> </xsd:element>
+            </xsd:choice>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="comment" minOccurs="0">
+        <!--Дополнительная информация (какие -либо комментарии,  необязательное значение)-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:maxLength value="2047"/>
+            <xsd:minLength value="1"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="localId" type="xsd:nonNegativeInteger" use="optional">
+      <!--Последовательный номер пункта в списке (необязательное значение)--> </xsd:attribute>
+    <xsd:attribute name="id" type="identityValue">
+      <!--Необязательный локальный идентификатор пункта по БД источника--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:complexType name="signatory">
+    <!--Подписавший-->
+    <xsd:complexContent>
+      <xsd:extension base="anyone">
+        <xsd:sequence>
+          <xsd:element name="signed" type="xsd:date">
+            <!--Дата подписания--> </xsd:element>
+          <xsd:element name="comment" minOccurs="0">
+            <!--Необязательный коментарий-->
+            <xsd:simpleType>
+              <xsd:restriction base="xsd:string">
+                <xsd:minLength value="1"/>
+                <xsd:maxLength value="2047"/>
+              </xsd:restriction>
+            </xsd:simpleType>
+          </xsd:element>
+        </xsd:sequence>
+      </xsd:extension>
+    </xsd:complexContent>
+  </xsd:complexType>
+  <xsd:complexType name="document">
+    <!--Документ (атрибутика документа)-->
+    <xsd:sequence>
+      <xsd:element name="type" minOccurs="0" type="qualifiedValue">
+        <!--Тип документа (необязательное значение)--> </xsd:element>
+      <xsd:element name="kind" type="qualifiedValue" minOccurs="0">
+        <!--Вид документа (необязательное значение)--> </xsd:element>
+      <xsd:element name="num" type="documentNumber">
+        <!--Номер и дата документа--> </xsd:element>
+      <xsd:element name="classification" type="qualifiedValue" minOccurs="0">
+        <!--Гриф секретности (необязательное значение)--> </xsd:element>
+      <xsd:element name="urgency" minOccurs="0" type="qualifiedValue">
+        <!--Срочность (необязательное значение)--> </xsd:element>
+      <xsd:element name="insteadOfDistributed" type="xsd:boolean" minOccurs="0">
+        <!--Признак "Взамен разосланного"  (необязательное значение)--> </xsd:element>
+      <xsd:element name="specialMark" type="stringValue" minOccurs="0">
+        <!--Особые отметки (необязательное значение)--> </xsd:element>
+      <xsd:element name="signatories">
+        <!--Подписавшие-->
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="signatory" maxOccurs="unbounded" type="signatory"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="addressees">
+        <!--Адресаты документа (кому направлено)-->
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="addressee" type="addressee" maxOccurs="unbounded"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="pages" type="xsd:nonNegativeInteger">
+        <!--Листов документа--> </xsd:element>
+      <xsd:element name="enclosuresPages" type="xsd:nonNegativeInteger" minOccurs="0">
+        <!--Листов приложений (необязательное значение)--> </xsd:element>
+      <xsd:element name="annotation" type="shortText" nillable="true" minOccurs="1">
+        <!--Аннотация, иначе - краткое содержание  (необязательное значение)--> </xsd:element>
+      <xsd:element name="enclosures" minOccurs="0">
+        <!--Приложения к документу (необязательное значение)-->
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="enclosure" type="enclosure" maxOccurs="unbounded"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="correspondents" minOccurs="0">
+        <!--Корреспонденты (необязательное значение)-->
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="correspondent" maxOccurs="unbounded" minOccurs="1"
+              type="correspondent"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="links" minOccurs="0">
+        <!--Связанные документы (необязательный элемент)-->
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="link" type="linkedDocument" maxOccurs="unbounded"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="clauses" minOccurs="0">
+        <!--Пункты документа (необязательный элемент)-->
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="clause" type="documentClause" maxOccurs="unbounded"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="executor" type="addressee" minOccurs="0">
+        <!--Исполнитель в министерстве--> </xsd:element>
+      <xsd:element name="files" minOccurs="0" type="listOfFileLocalId">
+        <!--Список "локальных" идентификаторов файлов, содержащих текст документа (необязательное значение)--> </xsd:element>
+      <xsd:element name="comment" minOccurs="0">
+        <!--Дополнительная информация (какие -либо комментарии,  необязательный элемент)-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:maxLength value="2047"/>
+            <xsd:minLength value="1"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="uid" type="globalUniqueIdentifier" use="required">
+      <!--Уникальный идентификатор документа--> </xsd:attribute>
+    <xsd:attribute name="id" type="identityValue">
+      <!--Необязательный локальный идентификатор документа в БД источника--> </xsd:attribute>
+    <xsd:attribute name="cookie" type="anyValue" use="optional">
+      <!--Этот атрибут должен быть проигнорирован--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:simpleType name="fileGroup">
+    <!--Группа присоединенного файла, определяет к чему относиться файл (к текcту документа, тексту приложений к документу и пр).-->
+    <xsd:restriction base="xsd:token">
+      <xsd:enumeration value="Текст документа"/>
+      <xsd:enumeration value="Текст приложения"/>
+      <xsd:enumeration value="Данные"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="fileType">
+    <!--Тип присоединенного файла-->
+    <xsd:restriction base="xsd:token">
+      <xsd:enumeration value="pdf"/>
+      <xsd:enumeration value="tif"/>
+      <xsd:enumeration value="doc"/>
+      <xsd:enumeration value="txt"/>
+      <xsd:enumeration value="xml"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="fileName">
+    <!--Имя файла-->
+    <xsd:restriction base="xsd:normalizedString">
+      <xsd:maxLength value="255"/>
+      <xsd:minLength value="1"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:complexType name="associatedFile">
+    <!--Присоединенный файл (с образом текста документа/приложения или данными), в случае передачи информации о подписании УКЭП, может содержать ссылки на дополнительные файлы.-->
+    <xsd:sequence>
+      <xsd:element name="group" type="fileGroup">
+        <!--Группа, к которой относиться файл--> </xsd:element>
+      <xsd:element name="description" nillable="false" minOccurs="0">
+        <!--Описание файла-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:maxLength value="511"/>
+            <xsd:minLength value="1"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+      <xsd:element name="pages" type="xsd:nonNegativeInteger" minOccurs="0">
+        <!--Листов текста--> </xsd:element>
+      <xsd:element name="signedData" maxOccurs="unbounded" type="signedData" minOccurs="0">
+        <!--Информация о подписаннии УКЭП--> </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="localName" type="fileName" use="required">
+      <!--Имя файла--> </xsd:attribute>
+    <xsd:attribute name="localId" type="xsd:nonNegativeInteger">
+      <!--Последовательный номер файла в списке--> </xsd:attribute>
+    <xsd:attribute name="type" type="fileType">
+      <!--Тип файла (формат файла)--> </xsd:attribute>
+    <xsd:attribute name="cookie" type="anyValue">
+      <!--Этот атрибут должен быть проигнорирован--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:simpleType name="reasonForRejection">
+    <xsd:restriction base="xsd:normalizedString">
+      <xsd:enumeration value="Не подлежит регистрации"/>
+      <xsd:enumeration value="Ошибка адресации"/>
+      <xsd:enumeration value="Не указан корреспондент"/>
+      <xsd:enumeration value="Нет искового заявления"/>
+      <xsd:enumeration value="Отсутствует текст"/>
+      <xsd:enumeration value="Нет подписи"/>
+      <xsd:enumeration value="Приложение отсутствует"/>
+      <xsd:enumeration value="Листаж приложения указан ошибочно"/>
+      <xsd:enumeration value="Несовпадение реквизитов приложения с приложенными документами"/>
+      <xsd:enumeration value="Нет № и даты"/>
+      <xsd:enumeration value="Не полная комплектация"/>
+      <xsd:enumeration value="Дата документа неразборчива"/>
+      <xsd:enumeration value="Исходящий номер документа неразборчив"/>
+      <xsd:enumeration value="Отсутствует (не видна) подпись"/>
+      <xsd:enumeration value="Перевернуты страницы"/>
+      <xsd:enumeration value="Продублированы страницы"/>
+      <xsd:enumeration value="В приложении проект нормативного акта"/>
+      <xsd:enumeration value="Документ ДСП"/>
+      <xsd:enumeration value="Документ и/или приложение отсканированы с оборотом"/>
+      <xsd:enumeration value="Документ неверно адресован"/>
+      <xsd:enumeration value="Документ получен ранее на бумажном носителе"/>
+      <xsd:enumeration value="Документ зарегистрирован ранее, текст взамен разосланного загружен"/>
+      <xsd:enumeration value="Количество страниц в тексте документа не соответствует заявленному"/>
+      <xsd:enumeration value="Несоответствие переданных реквизитов тексту документа"/>
+      <xsd:enumeration value="Отсутствует приложение, указанное в документе"/>
+      <xsd:enumeration value="Текст неразборчив"/>
+      <xsd:enumeration value="Текст отсутствует"/>
+      <xsd:enumeration value="Текст не соответствует регламенту"/>
+      <xsd:enumeration
+        value="Несоответствие содержимого транспортного контейнера утвержденным требованиям"/>
+      <xsd:maxLength value="127"/>
+      <xsd:minLength value="1"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:simpleType name="notificationType">
+    <!--Тип уведомления-->
+    <xsd:restriction base="xsd:token">
+      <xsd:enumeration value="Зарегистрирован"/>
+      <xsd:enumeration value="Отказано в регистрации"/>
+      <xsd:enumeration value="Назначен исполнитель"/>
+      <xsd:enumeration value="Доклад подготовлен"/>
+      <xsd:enumeration value="Доклад направлен"/>
+      <xsd:enumeration value="Исполнение"/>
+      <xsd:enumeration value="Опубликование"/>
+      <xsd:enumeration value="Государственная регистрация"/>
+    </xsd:restriction>
+  </xsd:simpleType>
+  <xsd:complexType name="notification">
+    <!--Базовый класс для уведомлений-->
+    <xsd:sequence>
+      <xsd:element name="time" type="xsd:dateTime">
+        <!--Дата время события--> </xsd:element>
+      <xsd:element name="foundation" minOccurs="0" type="documentReference">
+        <!--Информация о документе - основании, необязательный элемент, если указан уникальный идентификатор документа в атрибуте ../@uid--> </xsd:element>
+      <xsd:element name="clause" type="documentClause" nillable="false" minOccurs="0">
+        <!--Наименование пункта (необязательное значение)--> </xsd:element>
+      <xsd:element name="correspondent" minOccurs="0" type="addressee">
+        <!--Корреспондент уведомления(необязательное значение)--> </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="messageNotification">
+    <!--Уведомление (о событии)-->
+    <xsd:sequence>
+      <xsd:choice>
+        <xsd:element name="documentAccepted">
+          <!--Событие: документ зарегистрирован-->
+          <xsd:complexType>
+            <xsd:complexContent>
+              <xsd:extension base="notification">
+                <xsd:sequence>
+                  <xsd:element name="num" type="documentNumber">
+                    <!--Номер и дата документа--> </xsd:element>
+                </xsd:sequence>
+              </xsd:extension>
+            </xsd:complexContent>
+          </xsd:complexType>
+        </xsd:element>
+        <xsd:element name="documentRefused">
+          <!--Событие: отказано в регистрации-->
+          <xsd:complexType>
+            <xsd:complexContent>
+              <xsd:extension base="notification">
+                <xsd:sequence>
+                  <xsd:element name="reason" type="reasonForRejection">
+                    <!--Причина отказа--> </xsd:element>
+                </xsd:sequence>
+              </xsd:extension>
+            </xsd:complexContent>
+          </xsd:complexType>
+        </xsd:element>
+        <xsd:element name="executorAssigned">
+          <!--Событие: назначен исполнитель-->
+          <xsd:complexType>
+            <xsd:complexContent>
+              <xsd:extension base="notification">
+                <xsd:sequence>
+                  <xsd:element name="secretary" type="addressee">
+                    <!--Руководитель или курирующий заместитель руководителя ФОИВ--> </xsd:element>
+                  <xsd:element name="manager" type="addressee">
+                    <!--Руководитель подразделения исполнителя ФОИВ--> </xsd:element>
+                  <xsd:element name="executor" type="addressee">
+                    <!--Исполнитель ФОИВ--> </xsd:element>
+                </xsd:sequence>
+              </xsd:extension>
+            </xsd:complexContent>
+          </xsd:complexType>
+        </xsd:element>
+        <xsd:element name="reportPrepared">
+          <!--Событие: Доклад по документу подготовлен (соответствующий документ передан на подпись)-->
+          <xsd:complexType>
+            <xsd:complexContent>
+              <xsd:extension base="notification">
+                <xsd:sequence>
+                  <xsd:element name="signatory" type="signatory">
+                    <!--Лицо, которому передан документ--> </xsd:element>
+                </xsd:sequence>
+              </xsd:extension>
+            </xsd:complexContent>
+          </xsd:complexType>
+        </xsd:element>
+        <xsd:element name="reportSent">
+          <!--Событие: доклад по документу направлен (выпущен исходящий документ - ответ)-->
+          <xsd:complexType>
+            <xsd:complexContent>
+              <xsd:extension base="notification">
+                <xsd:sequence>
+                  <xsd:element name="report" type="documentReference">
+                    <!--Выпущенный исходящий документ (отчет)--> </xsd:element>
+                </xsd:sequence>
+              </xsd:extension>
+            </xsd:complexContent>
+          </xsd:complexType>
+        </xsd:element>
+        <xsd:element name="courseChanged">
+          <!--Событие: Изменение хода исполнения-->
+          <xsd:complexType>
+            <xsd:complexContent>
+              <xsd:extension base="notification">
+                <xsd:sequence>
+                  <xsd:element name="courseText" type="shortText">
+                    <!--Текст хода исполнения--> </xsd:element>
+                  <xsd:element name="reference" minOccurs="0" type="documentReference">
+                    <!--Ссылка на "сопутствующий" документ--> </xsd:element>
+                </xsd:sequence>
+              </xsd:extension>
+            </xsd:complexContent>
+          </xsd:complexType>
+        </xsd:element>
+        <xsd:element name="documentPublished">
+          <!--Событие: Опубликование документа-->
+          <xsd:complexType>
+            <xsd:complexContent>
+              <xsd:extension base="notification">
+                <xsd:sequence>
+                  <xsd:element name="num">
+                    <!--Номер и дата опубликования-->
+                    <xsd:complexType>
+                      <xsd:sequence>
+                        <xsd:element name="number">
+                          <xsd:simpleType>
+                            <xsd:restriction base="xsd:token">
+                              <xsd:minLength value="1"/>
+                              <xsd:maxLength value="31"/>
+                            </xsd:restriction>
+                          </xsd:simpleType>
+                          <!--Номер-->
+                        </xsd:element>
+                        <xsd:element name="date" type="xsd:dateTime">
+                          <!--Дата и время --> </xsd:element>
+                      </xsd:sequence>
+                    </xsd:complexType>
+                  </xsd:element>
+                  <xsd:element name="publicationPoint" type="stringValue">
+                    <!--Место (печатный орган) опубликования--> </xsd:element>
+                </xsd:sequence>
+              </xsd:extension>
+            </xsd:complexContent>
+          </xsd:complexType>
+        </xsd:element>
+      </xsd:choice>
+      <xsd:element name="comment" minOccurs="0">
+        <!--Дополнительная информация (какие -либо комментарии,  необязательное значение)-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:minLength value="1"/>
+            <xsd:maxLength value="2047"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="type" type="notificationType" use="required">
+      <!--Тип уведомления--> </xsd:attribute>
+    <xsd:attribute name="uid" type="globalUniqueIdentifier" use="required">
+      <!--Идентификатор документа (//communication/document/@uid)--> </xsd:attribute>
+    <xsd:attribute name="id" type="identityValue">
+      <!--Необязательный локальный идентификатор документа в БД источника (тот, который был передан через //communication/document/@id)--> </xsd:attribute>
+    <xsd:attribute name="mid" type="globalUniqueIdentifier">
+      <!--Необязательный уникальный идентификатор сообщения (//communication/header/@uid) с которым поступил данный документ корреспонденту этого уведомления--> </xsd:attribute>
+    <xsd:attribute name="cookie" type="anyValue">
+      <!--Этот атрибут должен быть проигнорирован--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:complexType name="messageAcknowledgment">
+    <!--Информация, подтверждающая прием указанного сообщения-->
+    <xsd:sequence>
+      <xsd:element name="time" type="xsd:dateTime" minOccurs="1">
+        <!--Дата/время принятия сообщения--> </xsd:element>
+      <xsd:element name="accepted" type="xsd:boolean">
+        <!--Признак того, что сообщение принято--> </xsd:element>
+      <xsd:element name="comment" minOccurs="0">
+        <!--Необязательные комментарии-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:maxLength value="2047"/>
+            <xsd:minLength value="1"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+      <xsd:element name="hashCodes" minOccurs="0">
+        <!--Информация для проверки целостности доставленного сообщения (список хэш-кодов для каждого элемента полученного ЭСД)-->
+        <xsd:complexType>
+          <xsd:sequence minOccurs="1" maxOccurs="1">
+            <xsd:element name="item" maxOccurs="unbounded">
+              <!--Элемент ЭСД (файл)-->
+              <xsd:complexType>
+                <xsd:sequence>
+                  <xsd:element name="name" type="fileName">
+                    <!--Наименование элемента (имя файла)--> </xsd:element>
+                  <xsd:element name="code">
+                    <!--Вычисленный хэш-код для элемента с использованием указанного криптопровайдера-->
+                    <xsd:simpleType>
+                      <xsd:restriction base="xsd:hexBinary">
+                        <xsd:maxLength value="128"/>
+                        <xsd:minLength value="32"/>
+                      </xsd:restriction>
+                    </xsd:simpleType>
+                  </xsd:element>
+                </xsd:sequence>
+              </xsd:complexType>
+            </xsd:element>
+          </xsd:sequence>
+          <xsd:attribute name="algorithm" use="optional" type="anyValue">
+            <!--Идентификация способа расчета хэш кодов для определения криптопровайдера, его типа и используемого алгоритма.-->
+          </xsd:attribute>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="uid" use="required" type="globalUniqueIdentifier">
+      <!--Идентификатор квитируемого сообщения (//communication/header@uid)--> </xsd:attribute>
+    <xsd:attribute name="content" type="stringValue">
+      <!--Информация о содержании квитируемого сообщения--> </xsd:attribute>
+    <xsd:attribute name="cookie" type="anyValue">
+      <!--Этот атрибут должен быть проигнорирован--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:simpleType name="listOfFileLocalId">
+    <xsd:list itemType="xsd:nonNegativeInteger"/>
+  </xsd:simpleType>
+  <xsd:complexType name="deliveryDestination">
+    <!--Адресат рассылки-->
+    <xsd:sequence>
+      <xsd:element name="destination" type="communicationPartner">
+        <!--Адресат--> </xsd:element>
+      <xsd:element name="files" maxOccurs="1" minOccurs="0" type="listOfFileLocalId" nillable="true"
+        >
+        <!--Список присоединенных файлов (перечисление локальных идентификаторов присоединенных файлов, см. associatedFile, communication.document.files)--> </xsd:element>
+      <xsd:element name="comment" minOccurs="0">
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:maxLength value="2047"/>
+            <xsd:minLength value="1"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="signerInfo">
+    <!--Информация о подписавшем УКЭП файл-->
+    <xsd:sequence>
+      <xsd:element name="digestTime" type="xsd:dateTime">
+        <!--Дата и время формирования УКЭП--> </xsd:element>
+      <xsd:element name="signer" type="anyone">
+        <!--Информация о подписавшем--> </xsd:element>
+      <xsd:element name="comment" minOccurs="0">
+        <!--Необязательные комментарии-->
+        <xsd:simpleType>
+          <xsd:restriction base="xsd:string">
+            <xsd:maxLength value="2048"/>
+            <xsd:minLength value="1"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="signature" use="required" type="fileName">
+      <!--Имя файла формата PKCS#7, содержащий подпись и сертификат подписанта (detached SignedData)--> </xsd:attribute>
+    <xsd:attribute name="cookie" type="anyValue">
+      <!--Этот атрибут должен быть проигнорирован--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:complexType name="signedData">
+    <!--Информация о подписаннии УКЭП присоединенного файла-->
+    <xsd:sequence>
+      <xsd:element name="signerInfo" maxOccurs="unbounded" minOccurs="1" type="signerInfo"/>
+    </xsd:sequence>
+    <xsd:attribute name="localName" use="optional" type="fileName">
+      <!--Имя файла--> </xsd:attribute>
+    <xsd:attribute name="type" type="fileType">
+      <!--Тип файла--> </xsd:attribute>
+    <xsd:attribute name="cookie" type="anyValue">
+      <!--Этот атрибут должен быть проигнорирован--> </xsd:attribute>
+  </xsd:complexType>
+  <xsd:complexType name="documentContainer">
+    <xsd:sequence>
+      <xsd:element name="body">
+        <!--Файл "архива", содержащий файлы "контейнера" документа в электронном виде-->
+        <xsd:simpleType>
+          <xsd:restriction base="fileName">
+            <xsd:pattern value="[a-zA-Z0-9_]{1,247}.edc.zip"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+      <xsd:element name="signature" minOccurs="0">
+        <!--Имя файла формата PKCS#7, содержащий подпись и сертификат отправителя (detached SignedData)-->
+        <xsd:simpleType>
+          <xsd:restriction base="fileName">
+            <xsd:pattern value="[a-zA-Z0-9_]{1,251}.[a-zA-Z0-9]{3}"/>
+          </xsd:restriction>
+        </xsd:simpleType>
+      </xsd:element>
+    </xsd:sequence>
+    <xsd:attribute name="type" use="optional" type="xsd:normalizedString"
+      default="Документ в электронном виде">
+      <!--Необязательный атрибут, определяющий тип контейнера, по умолчанию "Документ в электронном виде"-->
+    </xsd:attribute>
+  </xsd:complexType>
+</xsd:schema>

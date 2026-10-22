@@ -14,6 +14,9 @@ TK_NAME = re.compile(r"^[a-zA-Z0-9_]{1,247}\.edc\.zip$")
 
 M30, C30 = "{urn:IEDMS:MESSAGE:3.0}", "{urn:IEDMS:CONTAINER:3.0}"
 M27, C27 = "{urn:IEDMS:MESSAGE}", "{urn:IEDMS:CONTAINER}"
+# 2.7 и 2.6 (и ниже): одна схема сообщения, паспорт ТК только в 2.7
+M_OLD, C_OLD = "{http://www.infpres.com/IEDMS}", "{http://minsvyaz.ru/container}"
+DT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$")
 TYPES_271 = {"Документ": "document", "Уведомление": "notification", "Квитанция": "acknowledgment",
              "Транспортный контейнер": "container"}
 NOTIFICATIONS_271 = {"Зарегистрирован", "Отказано в регистрации", "Назначен исполнитель",
@@ -163,6 +166,39 @@ def message_271(root, label, errors):
     return info
 
 
+def message_27(root, label, errors):
+    """Сообщение 2.7 или 2.6 (и ниже): формат — атрибут version; тип «Документ» допустим (2.6),
+    deliveryIndex и часовой пояс в датах необязательны (схема 2.7)."""
+    c = Check(label, M_OLD, errors)
+    ver = c.attr(root, "version", "communication/@version")
+    info = {"format": ver or "2.7", "receivers": []}
+    h = c.el(root, "header", "header")
+    typ = c.attr(h, "type", "header/@type")
+    info["msg_uid"] = c.attr(h, "uid", "header/@uid", UUID, "UUID в нижнем регистре")
+    c.attr(h, "created", "header/@created", DT, "дата-время")
+    src = c.el(h, "source", "header/source")
+    org = c.el(src, "organization", "наименование отправителя (header/source/organization)")
+    info["source"] = {"guid": c.attr(src, "uid", "header/source/@uid", UUID, "UUID"), "name": _text(org)}
+    if typ:
+        branch = TYPES_271.get(typ)
+        if branch is None:
+            c.err(f"header/@type = «{typ}»: допустимо {', '.join(TYPES_271)}")
+        else:
+            info["kind"] = branch
+            b = c.el(root, branch, f"ветка {branch} для типа «{typ}»")
+            if branch == "container" and b is not None:
+                f = c.el(b, "body", "имя файла ТК (container/body)")
+                info["container_file"] = _text(f)
+            if branch == "document" and b is not None:
+                info["files"] = [c.attr(f, "localName", "files/file/@localName")
+                                 for f in root.findall(f"{M_OLD}files/{M_OLD}file")]
+    di = root.find(M_OLD + "deliveryIndex")
+    for d in (di.findall(f"{M_OLD}destination/{M_OLD}destination") if di is not None else []):
+        g = c.attr(d, "uid", "deliveryIndex/destination/destination/@uid", UUID, "UUID")
+        info["receivers"].append({"guid": g, "name": _text(d.find(M_OLD + "organization"))})
+    return info
+
+
 def _org(c, parent, what):
     o = c.el(parent, "organization", f"{what}/organization")
     c.attr(o, "id", f"{what}/organization/@id", UUID, "UUID")
@@ -203,19 +239,20 @@ def container_30(root, label, errors, msg):
             _org(c, ad, "addressees/addressee")
 
 
-def container_271(root, label, errors, msg):
-    c = Check(label, C27, errors)
+def container_271(root, label, errors, msg, q=C27, version="2.7.1"):
+    c = Check(label, q, errors)
     uid = c.attr(root, "uid", "container/@uid", UUID, "UUID в нижнем регистре")
     if uid and msg and uid == msg.get("msg_uid"):
         c.err("container/@uid совпадает с идентификатором сообщения header/@uid")
     ver = c.attr(root, "version", "container/@version")
-    if ver and ver != "2.7.1":
-        c.err(f"container/@version = «{ver}», ожидается 2.7.1")
+    if ver and ver != version:
+        c.err(f"container/@version = «{ver}», ожидается {version}")
     req = c.el(root, "requisites", "requisites")
     for name, what in (("documentKind", "вид документа"), ("classification", "гриф (classification)"),
                        ("documentPlace", "место составления")):
-        c.el(req, name, f"{what} (requisites/{name})")
-    authors = root.findall(f"{C27}authors/{C27}author")
+        # в 2.7 гриф и место составления необязательны
+        c.el(req, name, f"{what} (requisites/{name})", required=version == "2.7.1" or name == "documentKind")
+    authors = root.findall(f"{q}authors/{q}author")
     if not authors:
         c.err("нет ни одного автора (authors/author)")
     for a in authors:
@@ -223,15 +260,19 @@ def container_271(root, label, errors, msg):
         reg = c.el(a, "registration", "регистрационные данные (authors/author/registration)")
         c.el(reg, "number", "регистрационный номер (registration/number)")
         c.el(reg, "date", "дата регистрации (registration/date)", DATE, "дата ГГГГ-ММ-ДД")
-        for s in a.findall(C27 + "sign"):
-            p = s.find(C27 + "person")
+        for s in a.findall(q + "sign"):
+            p = s.find(q + "person")
             if p is not None:
                 c.el(p, "name", "ФИО подписанта (sign/person/name)")
     d = c.el(root, "document", "document")
     c.attr(d, "localName", "document/@localName")
-    for ad in root.findall(f"{C27}addressees/{C27}addressee"):
-        if ad.find(C27 + "organization") is not None:
+    for ad in root.findall(f"{q}addressees/{q}addressee"):
+        if ad.find(q + "organization") is not None:
             _org(c, ad, "addressees/addressee")
+
+
+def container_27(root, label, errors, msg):
+    container_271(root, label, errors, msg, q=C_OLD, version="1.0")
 
 
 def check_gas(msg, addresses, gas, warnings):

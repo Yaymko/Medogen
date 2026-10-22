@@ -14,6 +14,8 @@ SCHEMAS = {
     "urn:IEDMS:CONTAINER": ("2.7.1", "container.xsd"),
     "urn:IEDMS:MESSAGE:3.0": ("3.0", "message.xsd"),
     "urn:IEDMS:CONTAINER:3.0": ("3.0", "container.xsd"),
+    "http://www.infpres.com/IEDMS": ("2.7", "message.xsd"),  # 2.7 и 2.6 (и ниже)
+    "http://minsvyaz.ru/container": ("2.7", "container.xsd"),
 }
 
 try:
@@ -94,6 +96,13 @@ def validate_folder(folder, warnings=None, gas=None):
                 msg = required.message_30(root, f, errors)
             elif root is not None and root.tag == "{urn:IEDMS:MESSAGE}communication":
                 msg = required.message_271(root, f, errors)
+            elif root is not None and root.tag == "{http://www.infpres.com/IEDMS}communication":
+                msg = required.message_27(root, f, errors)
+                for name in msg.get("files") or []:  # 2.6: файлы письма лежат рядом с document.xml
+                    if name and name not in files:
+                        errors.append(f"{f}: файл {name} из files/file не перечислен в [ФАЙЛЫ] envelope.ini")
+                    if name and not os.path.isfile(os.path.join(folder, name)):
+                        errors.append(f"{f}: файл {name} из files/file отсутствует в пакете")
             if root is not None:
                 required.uuid_attrs(root, f, errors)
         elif f.endswith(".edc.zip"):
@@ -147,6 +156,8 @@ def check_container(data, label, errors, msg=None):
             required.container_30(root, plabel, errors, msg)
         elif ns == "urn:IEDMS:CONTAINER":
             required.container_271(root, plabel, errors, msg)
+        elif ns == "http://minsvyaz.ru/container":
+            required.container_27(root, plabel, errors, msg)
         if ns == "urn:IEDMS:CONTAINER:3.0":
             q = "{urn:IEDMS:CONTAINER:3.0}"
             integ = root.find(f"{q}integrity")
@@ -166,7 +177,7 @@ def check_container(data, label, errors, msg=None):
             referenced += [v for e in root.iter() for k, v in e.attrib.items()
                            if k in (f"{q}stampFile", f"{q}signFile")]
         else:
-            q = "{urn:IEDMS:CONTAINER}"
+            q = "{" + ns + "}"
             referenced = [v for e in root.iter() for k, v in e.attrib.items() if k == f"{q}localName"]
         for r in referenced:
             if r not in names:
