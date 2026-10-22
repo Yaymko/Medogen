@@ -134,7 +134,7 @@ details summary { cursor: pointer; color: var(--muted); margin: 8px 0; }
 <body>
 <header>
   <div class="bar">
-    <div class="logo">Генератор МЭДО<small>2.7.1 · 3.0</small></div>
+    <div class="logo">Генератор МЭДО<small>2.6 · 2.7 · 2.7.1 · 3.0</small></div>
     <nav id="nav">
       <button data-tab="create" class="on">Создать пакет</button>
       <button data-tab="packages">Пакеты</button>
@@ -231,6 +231,11 @@ const TYPE_HINT = {
   notification: "Ответ на пакет", assignment: "digital.xml, события",
 };
 const NOTIF_30 = ["registered", "refused"];
+// Семейство формата, как builder.family: 2.0–2.6 собираются по структуре 2.6
+const fam = f => ["3.0", "2.7.1", "2.7"].includes(f) ? f : /^2\.[0-6]$/.test(f || "") ? "2.6" : f;
+const isOld = f => ["2.7", "2.6"].includes(fam(f));
+const FORMAT_LABEL = { "3.0": "3.0", "2.7.1": "2.7.1", "2.7": "2.7", "2.6": "2.6 и ниже" };
+const OLD_VERSIONS = ["2.6", "2.5", "2.4", "2.3", "2.2", "2.1", "2.0"];
 
 function orgName(guid) { const o = ORGS.orgs.find(o => o.guid === guid || o.key === guid) || GAS_PICKED[guid]; return o ? o.name : guid; }
 function orgOptions(value, allowEmpty) {
@@ -343,17 +348,22 @@ const needsReply = () => ["receipt", "notification"].includes(S.type) || (S.type
 
 function renderCreate() {
   const root = $("#tab-create"); root.innerHTML = "";
-  if (S.format === "2.7.1" && S.type === "gosedo") S.type = "document";
+  if (S.format !== "3.0" && S.type === "gosedo") S.type = "document";
+  if (isOld(S.format) && S.type === "assignment") { S.type = "document"; toast("Поручений нет в форматах 2.7 и 2.6, выбран документ"); }
   if (S.format === "3.0" && S.type === "notification" && !NOTIF_30.includes(S.notification.kind)) S.notification.kind = "registered";
   const form = h("div", { class: "card" });
 
   form.append(h("div", { class: "actions", style: "justify-content:space-between;margin-bottom:12px" },
     h("div", { class: "actions" }, h("b", {}, "Формат"),
-      h("div", { class: "seg" }, ...["3.0", "2.7.1"].map(f => h("button", { type: "button", class: S.format === f ? "on" : "", onclick: () => { S.format = f; save(); renderCreate(); } }, f)))),
+      h("div", { class: "seg" }, ...META.formats.map(f => h("button", { type: "button", class: fam(S.format) === f ? "on" : "",
+        onclick: () => { if (fam(S.format) !== f) S.format = f; save(); renderCreate(); } }, FORMAT_LABEL[f] || f))),
+      fam(S.format) === "2.6" ? h("select", { title: "Версия формата (структура 2.6)", onchange: e => { S.format = e.target.value; save(); renderCreate(); } },
+        ...OLD_VERSIONS.map(v => h("option", { value: v, selected: S.format === v }, v))) : null,
+      fam(S.format) === "2.6" ? checkbox("sign_files", "Файлы подписей") : null),
     h("button", { class: "btn small", type: "button", onclick: () => { resetForm(S); LAST_RESULT = null; FORM_ERRS = []; save(); renderCreate(); } }, "Очистить форму")));
 
   form.append(h("div", { class: "tiles" }, ...Object.entries(META.types).map(([k, t]) =>
-    h("button", { type: "button", class: "tile" + (S.type === k ? " on" : ""), disabled: k === "gosedo" && S.format !== "3.0",
+    h("button", { type: "button", class: "tile" + (S.type === k ? " on" : ""), disabled: (k === "gosedo" && S.format !== "3.0") || (k === "assignment" && isOld(S.format)),
       onclick: () => { S.type = k; save(); renderCreate(); } }, h("b", {}, t), h("span", {}, TYPE_HINT[k])))));
 
   if (S.type === "assignment") form.append(h("h3", {}, "Событие поручения"),
@@ -563,12 +573,12 @@ function receiptSection() {
 
 function notificationSection() {
   const n = "notification.";
-  const kinds = Object.entries(META.notifications).filter(([k]) => S.format === "2.7.1" ? k !== "sent" : NOTIF_30.includes(k));
+  const kinds = Object.entries(META.notifications).filter(([k]) => S.format === "3.0" ? NOTIF_30.includes(k) : k !== "sent");
   const box = h("div", {}, h("h3", {}, "Уведомление"),
     field("Вид уведомления", bind(n + "kind", { tag: "select", options: kinds.map(([k, v]) => h("option", { value: k }, v)) }, true)));
   const k = S.notification.kind;
   if (k === "registered") box.append(h("div", { class: "row" }, field("Входящий номер", bind(n + "number", { placeholder: "авто" })), field("Дата регистрации", bind(n + "date", { type: "date" }))));
-  if (k === "refused") box.append(field("Причины отказа (Cat01-004-00005) *", reasonsBox(n + "reasons", META.refusal_reasons)));
+  if (k === "refused") box.append(field("Причины отказа (Cat01-004-00005) *", reasonsBox(n + "reasons", isOld(S.format) ? META.refusal_reasons_old : META.refusal_reasons)));
   if (k === "executor_assigned") box.append(h("div", { class: "row" }, field("Секретарь", bind(n + "secretary", { placeholder: "Секретарь" })), field("Руководитель", bind(n + "manager", { placeholder: "Руководитель" })), field("Исполнитель", bind(n + "executor", { placeholder: "Исполнитель" }))));
   if (k === "report_prepared") box.append(h("div", { class: "row" }, field("Подписант доклада", bind(n + "signatory", { placeholder: "Подписант" })), field("Должность", bind(n + "signatory_post", { placeholder: "Руководитель" }))));
   if (k === "report_sent") box.append(h("div", { class: "row" }, field("Номер доклада", bind(n + "report_number", { placeholder: "авто" })), field("Дата доклада", bind(n + "report_date", { type: "date" }))));
@@ -620,6 +630,7 @@ function clean(o) {
 }
 function buildSpec() {
   const t = S.type, spec = { format: S.format, type: t, name: META.types[t] };
+  if (fam(S.format) === "2.6" && S.sign_files && ["document", "citizen_appeal"].includes(t)) spec.sign_files = true;
   if (S.from) spec.from = S.from;
   if (S.to.length) spec.to = [...S.to];
   if (needsReply() || replyDoc()) {
@@ -886,10 +897,11 @@ function renderReplies() {
   kinds.forEach(([k, a, b]) => {
     const cb = h("input", { type: "checkbox", checked: !!RP.pick[k], onchange: () => { RP.pick[k] = cb.checked; save(); count(); } });
     let extra = null;
-    if (k === "r_err") extra = p.format === "3.0"
+    if (k === "r_err" && isOld(p.format)) extra = null;
+    else if (k === "r_err") extra = p.format === "3.0"
       ? h("select", { style: "width:auto;max-width:330px", onchange: e => { RP.reason30 = e.target.value; save(); } }, ...Object.entries(META.receipt_reasons).map(([id, t]) => h("option", { value: id, selected: RP.reason30 === id }, `${id} ${t}`)))
       : h("label", { class: "actions small muted" }, "код ошибки", h("input", { type: "number", style: "width:90px", value: RP.code271, title: "errorCode", oninput: e => { RP.code271 = e.target.value; save(); } }));
-    if (k === "n_refused") extra = h("select", { style: "width:auto;max-width:330px", onchange: e => { RP.refuse = e.target.value; save(); } }, ...Object.entries(META.refusal_reasons).map(([id, t]) => h("option", { value: id, selected: RP.refuse === id }, `${id} ${t}`)));
+    if (k === "n_refused") extra = h("select", { style: "width:auto;max-width:330px", onchange: e => { RP.refuse = e.target.value; save(); } }, ...Object.entries(isOld(p.format) ? META.refusal_reasons_old : META.refusal_reasons).map(([id, t]) => h("option", { value: id, selected: RP.refuse === id }, `${id} ${t}`)));
     if (k === "n_registered") extra = h("input", { style: "width:140px", placeholder: "вх. номер: авто", value: RP.reg_number, oninput: e => { RP.reg_number = e.target.value; save(); } });
     if (k === "d_doc") extra = h("button", { class: "btn small", type: "button", title: "Заполнить реквизиты, приложения, свой PDF",
       onclick: () => { $("#replies").close(); startReply(p, "document"); } }, "Открыть в форме…");
@@ -1042,7 +1054,7 @@ function renderPackages() {
   const q = h("input", { placeholder: "Поиск: название, номер, GUID, организация", value: PF.q, oninput: () => { PF.q = q.value; fill(); } });
   const tsel = h("select", { onchange: () => { PF.type = tsel.value; fill(); } }, h("option", { value: "" }, "Все типы"),
     ...Object.entries(META.types).map(([k, v]) => h("option", { value: k, selected: PF.type === k }, v)), h("option", { value: "incoming", selected: PF.type === "incoming" }, "Входящие"));
-  const fsel = h("select", { onchange: () => { PF.format = fsel.value; fill(); } }, h("option", { value: "" }, "Все форматы"), ...["3.0", "2.7.1"].map(f => h("option", { value: f, selected: PF.format === f }, f)));
+  const fsel = h("select", { onchange: () => { PF.format = fsel.value; fill(); } }, h("option", { value: "" }, "Все форматы"), ...META.formats.map(f => h("option", { value: f, selected: PF.format === f }, FORMAT_LABEL[f] || f)));
   const inp = h("input", { type: "file", multiple: true, class: "hidden", onchange: () => uploadIncoming([...inp.files]) });
   const dir = h("input", { type: "file", multiple: true, webkitdirectory: true, class: "hidden", onchange: () => uploadIncoming([...dir.files]) });
   list.addEventListener("dragover", e => { e.preventDefault(); list.style.outline = "2px dashed var(--accent)"; });
@@ -1058,7 +1070,7 @@ function renderPackages() {
   function fill() {
     tbody.innerHTML = "";
     const qq = PF.q.toLowerCase();
-    const rows = PACKAGES.filter(p => (!PF.type || p.type === PF.type) && (!PF.format || p.format === PF.format) &&
+    const rows = PACKAGES.filter(p => (!PF.type || p.type === PF.type) && (!PF.format || fam(p.format) === PF.format) &&
       (!qq || JSON.stringify([p.name, p.reg_number, p.msg_uid, p.doc_uid, p.from, p.to, p.id, p.parent_id, p.taken_from?.stand]).toLowerCase().includes(qq)));
     if (!rows.length) tbody.append(h("tr", {}, h("td", { colspan: 7, class: "empty" }, PACKAGES.length ? "Ничего не найдено" : "Пакетов пока нет")));
     rows.forEach(p => tbody.append(h("tr", { class: "click" + (p.id === PKG_SEL ? " sel" : ""), onclick: () => openPackage(p.id) },

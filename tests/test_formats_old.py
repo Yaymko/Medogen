@@ -296,5 +296,57 @@ class Build26(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(folder, sig)), sig)
 
 
+
+class Replies(unittest.TestCase):
+    def setUp(self):
+        from medogen_core import webui
+        self.box = tempfile.TemporaryDirectory()
+        os.makedirs(os.path.join(self.box.name, "orgs"))
+        shutil.copy(DEFAULT_ORGS, os.path.join(self.box.name, "orgs", "default.json"))
+        self.app = webui.App(self.box.name)
+
+    def tearDown(self):
+        self.box.cleanup()
+
+    def build(self, scenario):
+        r = self.app.build({"stand": "default.json", "scenario": scenario})
+        self.assertIsNone(r["error"], r.get("log"))
+        return r["packages"]
+
+    def test_meta_formats(self):
+        self.assertEqual(self.app.meta()["formats"], ["3.0", "2.7.1", "2.7", "2.6"])
+
+    def test_replies_keep_format(self):
+        for fmt in ("2.7", "2.5"):
+            with self.subTest(fmt=fmt):
+                doc = self.build({"format": fmt, "type": "document", "from": "pravit_mo", "to": ["mo_duma"]})[0]
+                self.assertEqual(doc["format"], fmt)
+                card = self.app.package_card(doc["folder"])
+                replies = self.build({"packages": [
+                    {"format": card["format"], "type": "receipt", "reply_to": "ui:" + doc["id"]},
+                    {"format": card["format"], "type": "notification", "reply_to": "ui:" + doc["id"],
+                     "notification": {"kind": "registered"}}]})
+                for r in replies:
+                    self.assertEqual(r["format"], fmt)
+                    self.assertEqual(r["errors"], [])
+
+    def test_incoming_26_card(self):
+        folder = make_26(os.path.join(self.app.incoming, "in1"))
+        cards = {c["id"]: c for c in self.app.packages()}
+        card = cards[self.app.pkg_id(folder)]
+        self.assertEqual(card["format"], "2.6")
+        self.assertEqual(card["reg_number"], "021")
+
+    def test_reply_document_to_26_links(self):
+        doc = self.build({"format": "2.6", "type": "document", "from": "pravit_mo", "to": ["mo_duma"]})[0]
+        ans = self.build({"format": "2.6", "type": "document", "reply_to": "ui:" + doc["id"], "document": {}})[0]
+        self.assertEqual(ans["errors"], [])
+        m = xml_root(os.path.join(ans["folder"], "document.xml"))
+        link = m.find(f"{NS_M}document/{NS_M}links/{NS_M}link")
+        self.assertEqual(link.get(NS_M + "uid"), doc["doc_uid"])
+        self.assertEqual(link.findtext(NS_M + "linkType"), "В ответ на")
+        self.assertTrue(m.findtext(f"{NS_M}document/{NS_M}annotation").startswith("Ответ на №"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -21,7 +21,7 @@ import webbrowser
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import builder, digital, exchange, gas, importer, v271, validate
+from . import builder, digital, exchange, gas, importer, v27, v271, validate
 from .common import (CLASSES, KINDS, PLACES, RECEIPT_REASONS, REFUSAL_REASONS, WARNINGS,
                      Directory, MedoError, load_json, safe_dir_name)
 from .reply import read_package
@@ -101,6 +101,9 @@ class App:
             "receipt_reasons": RECEIPT_REASONS, "refusal_reasons": REFUSAL_REASONS,
             "notifications": NOTIFICATION_TITLES, "events": EVENT_TITLES,
             "stands": stands, "examples": examples, "xsd": validate.has_xsd(),
+            "formats": ["3.0", "2.7.1", "2.7", "2.6"],
+            # причины отказа, которые есть в перечне схемы 2.7/2.6 (код → текст схемы)
+            "refusal_reasons_old": v27.REFUSAL_TEXTS,
             "work_dir": self.work,
         }
 
