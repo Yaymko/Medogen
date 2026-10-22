@@ -1,0 +1,144 @@
+{
+  "description": "2.6 и ниже: документ без транспортного контейнера (document.xml + файлы) и ответы; ниже — тот же документ в версии 2.5",
+  "defaults": {
+    "format": "2.6"
+  },
+  "packages": [
+    {
+      "name": "doc",
+      "type": "document",
+      "from": "pravit_mo",
+      "to": [
+        "mo_duma"
+      ],
+      "document": {
+        "annotation": "О согласовании проекта",
+        "reg_number": "П-100"
+      }
+    },
+    {
+      "name": "receipt_ok",
+      "type": "receipt",
+      "reply_to": "@doc",
+      "receipt": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "receipt_err",
+      "type": "receipt",
+      "reply_to": "@doc",
+      "receipt": {
+        "accepted": false,
+        "comment": "Не удалось проверить ЭП"
+      }
+    },
+    {
+      "name": "registered",
+      "type": "notification",
+      "reply_to": "@doc",
+      "notification": {
+        "kind": "registered",
+        "number": "ВХ-555",
+        "date": "today"
+      }
+    },
+    {
+      "name": "refused",
+      "type": "notification",
+      "reply_to": "@doc",
+      "notification": {
+        "kind": "refused",
+        "reasons": [
+          "205"
+        ]
+      }
+    },
+    {
+      "name": "executor_assigned",
+      "type": "notification",
+      "reply_to": "@doc",
+      "notification": {
+        "kind": "executor_assigned",
+        "secretary": {
+          "person": "Сидорова А.А.",
+          "contact": "+7 (495) 111-11-11"
+        },
+        "manager": {
+          "person": "Кузнецов Д.А.",
+          "post": "Начальник управления"
+        },
+        "executor": {
+          "person": "Петров П.П.",
+          "post": "Консультант"
+        }
+      }
+    },
+    {
+      "name": "report_prepared",
+      "type": "notification",
+      "reply_to": "@doc",
+      "notification": {
+        "kind": "report_prepared",
+        "signatory": {
+          "person": "Кузнецов Д.А.",
+          "post": "Председатель",
+          "signed": "today"
+        }
+      }
+    },
+    {
+      "name": "report_sent",
+      "type": "notification",
+      "reply_to": "@doc",
+      "notification": {
+        "kind": "report_sent",
+        "report": {
+          "number": "ИСХ-77",
+          "date": "today"
+        }
+      }
+    },
+    {
+      "name": "course_changed",
+      "type": "notification",
+      "reply_to": "@doc",
+      "notification": {
+        "kind": "course_changed",
+        "text": "Срок исполнения продлен до конца месяца"
+      }
+    },
+    {
+      "name": "published",
+      "type": "notification",
+      "reply_to": "@doc",
+      "notification": {
+        "kind": "published",
+        "number": "1234",
+        "publication_point": "pravo.gov.ru"
+      }
+    },
+    {
+      "name": "doc_25",
+      "type": "document",
+      "format": "2.5",
+      "from": "pravit_mo",
+      "to": [
+        "mo_duma"
+      ],
+      "document": {
+        "annotation": "О согласовании проекта (версия 2.5)",
+        "reg_number": "П-101"
+      }
+    },
+    {
+      "name": "answer",
+      "type": "document",
+      "reply_to": "@doc",
+      "document": {
+        "annotation": "Ответ на письмо",
+        "reg_number": "И-12"
+      }
+    }
+  ]
+}
