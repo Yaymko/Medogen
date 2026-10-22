@@ -229,5 +229,72 @@ class Build27(unittest.TestCase):
         self.assertTrue(any("notify_sent" in w for w in common.WARNINGS), common.WARNINGS)
 
 
+
+class Build26(unittest.TestCase):
+    BASE = {"format": "2.6", "from": "pravit_mo", "to": ["mo_duma"]}
+
+    def setUp(self):
+        self.box = tempfile.TemporaryDirectory()
+        common.WARNINGS.clear()
+
+    def tearDown(self):
+        self.box.cleanup()
+
+    def one(self, **spec):
+        return build(self.box.name, [{**self.BASE, "name": "p", **spec}])["p"][0]
+
+    def assertValid(self, folder):
+        self.assertEqual(validate.validate_folder(folder), [])
+
+    def test_document_valid(self):
+        folder = self.one(type="document", document={"attachments": [{"pages": 1}]})
+        self.assertValid(folder)
+        self.assertEqual(sorted(os.listdir(folder)),
+                         ["document.pdf", "document.xml", "document_att1.pdf", "envelope.ini"])
+        m = xml_root(os.path.join(folder, "document.xml"))
+        self.assertEqual(m.get(NS_M + "version"), "2.6")
+        self.assertEqual(m.find(NS_M + "header").get(NS_M + "type"), "Документ")
+        files = m.findall(f"{NS_M}files/{NS_M}file")
+        self.assertEqual([(f.get(NS_M + "localName"), f.get(NS_M + "localId")) for f in files],
+                         [("document.pdf", "1"), ("document_att1.pdf", "2")])
+        self.assertEqual(read_package(folder)["format"], "2.6")
+
+    def test_citizen_appeal_valid(self):
+        folder = self.one(type="citizen_appeal", citizen={"last_name": "Петров", "first_name": "Пётр"})
+        self.assertValid(folder)
+        self.assertIn("CardInfo.txt", os.listdir(folder))
+        names = [f.get(NS_M + "localName") for f in
+                 xml_root(os.path.join(folder, "document.xml")).findall(f"{NS_M}files/{NS_M}file")]
+        self.assertIn("CardInfo.txt", names)
+
+    def test_receipt_and_notifications_valid(self):
+        doc = self.one(type="document")
+        specs = [{"type": "receipt", "receipt": {"accepted": a}} for a in (True, False)]
+        specs += [{"type": "notification", "notification": {"kind": k}}
+                  for k in v271.NOTIFICATION_TYPES if k != "sent"]
+        for sp in specs:
+            with self.subTest(spec=sp):
+                folder = build(self.box.name, [{"format": "2.6", "name": "r", "reply_to": doc, **sp}])["r"][0]
+                self.assertValid(folder)
+                self.assertEqual(sorted(os.listdir(folder)), ["document.xml", "envelope.ini"])
+
+    def test_version_25(self):
+        folder = build(self.box.name, [{**self.BASE, "format": "2.5", "name": "p", "type": "document"}])["p"][0]
+        self.assertValid(folder)
+        self.assertEqual(xml_root(os.path.join(folder, "document.xml")).get(NS_M + "version"), "2.5")
+        with self.assertRaises(MedoError):
+            build(self.box.name, [{**self.BASE, "format": "2.8", "name": "p", "type": "document"}])
+
+    def test_sign_files(self):
+        folder = self.one(type="document", sign_files=True, document={"attachments": [{"pages": 1}]})
+        self.assertValid(folder)
+        m = xml_root(os.path.join(folder, "document.xml"))
+        for f in m.findall(f"{NS_M}files/{NS_M}file"):
+            sd = f.find(NS_M + "signedData")
+            self.assertIsNotNone(sd, f.get(NS_M + "localName"))
+            sig = sd.find(NS_M + "signerInfo").get(NS_M + "signature")
+            self.assertTrue(os.path.isfile(os.path.join(folder, sig)), sig)
+
+
 if __name__ == "__main__":
     unittest.main()

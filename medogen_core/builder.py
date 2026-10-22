@@ -4,7 +4,7 @@ import re
 import os
 import shutil
 
-from . import digital, gas, v27, v271, v30
+from . import digital, gas, v26, v27, v271, v30
 from .common import (RECEIPT_REASONS, Clock, Directory, MedoError, Org, Signer, check_guid,
                      load_json, medo_addresses, new_uuid, safe_dir_name, write_envelope, warn)
 from .model import DEFAULT_SIGNER, DocSpec
@@ -234,6 +234,23 @@ def _send_27(ctx, folder, msg_uid, doc, extra=()):
     return write_message(ctx, folder, msg, [("container.edc.zip", zbytes)], ctx.to)
 
 
+def _msg_name(ctx):
+    """В 2.6 паспорт ЭС называется document.xml (по эталонам), в остальных — message.xml."""
+    return "document.xml" if ctx.family == "2.6" else None
+
+
+def _send_26(ctx, folder, msg_uid, doc, extra=()):
+    """2.6: document.xml и файлы письма рядом, без ТК; подписи файлов по sign_files."""
+    files = v26.document_files(ctx, doc, extra, sign=ctx.spec.get("sign_files", False))
+    msg = v26.document_message(ctx, msg_uid, doc, files, ctx.format)
+    out = []
+    for name, data, _g, _d, _p, sig in files:
+        out.append((name, data))
+        if sig:
+            out.append((sig, ctx.crypto.sign(data, name)))
+    return write_message(ctx, folder, msg, out, ctx.to, msg_name="document.xml")
+
+
 def _gosedo_enclosures(ctx, doc, include_pdf, extra=()):
     """Приложения для ТК ГосЭДО: только enclosure_* без отдельных файлов подписей."""
     enc, _ = v30.attachment_files(ctx, doc)
@@ -347,17 +364,20 @@ def build_document(ctx, folder, msg_uid):
 
     if ctx.type == "citizen_appeal":
         card = cardinfo(ctx.spec.get("citizen") or {})
-        if ctx.family in ("2.7.1", "2.7"):
+        if ctx.family in ("2.7.1", "2.7", "2.6"):
             extra = [("CardInfo.txt", card, len(doc.attachments), "Данные об авторе обращения")]
         else:
             warn("3.0: CardInfo.txt не предусмотрен форматом, данные автора вложены как "
                  "enclosure_cardinfo.txt — уточните требования получателя")
             extra = [("enclosure_cardinfo.txt", card, "Данные об авторе обращения")]
 
-    if ctx.family == "2.7":
+    if ctx.family in OLD:
         if ctx.spec.get("notify_sent") is not None:
             warn("в 2.7/2.6 уведомление нельзя приложить к ТК, notify_sent пропущен")
-        manifest["files"] = _send_27(ctx, folder, msg_uid, doc, extra)
+        if ctx.family == "2.7":
+            manifest["files"] = _send_27(ctx, folder, msg_uid, doc, extra)
+        else:
+            manifest["files"] = _send_26(ctx, folder, msg_uid, doc, [(n, b, d) for n, b, _o, d in extra])
         return manifest
 
     if ctx.family == "2.7.1":
@@ -419,7 +439,7 @@ def build_receipt(ctx, folder, msg_uid):
         msg = v271.message(ctx, "Квитанция", msg_uid, ctx.to, acknowledgment=v271.acknowledgment(r, ctx.clock))
     else:
         msg = v30.message(ctx, msg_uid, ctx.to, receipt=v30.receipt(r), time_limit=_time_limit(ctx))
-    return {"on_msg_uid": r.on_msg_uid, "files": write_message(ctx, folder, msg, [], ctx.to)}
+    return {"on_msg_uid": r.on_msg_uid, "files": write_message(ctx, folder, msg, [], ctx.to, _msg_name(ctx))}
 
 
 # --- Уведомления -----------------------------------------------------------------
@@ -473,7 +493,7 @@ def build_notification(ctx, folder, msg_uid):
             n.reasons = n.reasons[:1]
         msg = v27.message(ctx, "Уведомление", msg_uid, ctx.to, version=ctx.format,
                           notification=v271.notification(n, ctx.clock, reason=v27.refusal_text))
-        return {"doc_uid": n.document_uid, "files": write_message(ctx, folder, msg, [], ctx.to)}
+        return {"doc_uid": n.document_uid, "files": write_message(ctx, folder, msg, [], ctx.to, _msg_name(ctx))}
     if ctx.family == "2.7.1":
         msg = v271.message(ctx, "Уведомление", msg_uid, ctx.to, notification=v271.notification(n, ctx.clock))
         return {"doc_uid": n.document_uid, "files": write_message(ctx, folder, msg, [], ctx.to)}
