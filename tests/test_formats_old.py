@@ -1,6 +1,11 @@
 """Форматы 2.7 и 2.6 (и ниже): проверка, чтение входящих, сборка и ответы."""
+import contextlib
 import glob
+import io
+import json
 import os
+import zipfile
+import xml.etree.ElementTree as ET
 import shutil
 import sys
 import tempfile
@@ -9,8 +14,12 @@ import unittest
 ROOT = os.environ.get("MEDOGEN_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from medogen_core import validate  # noqa: E402
+from medogen_core import builder, common, v271, validate  # noqa: E402
+from medogen_core.common import MedoError  # noqa: E402
 from medogen_core.reply import read_package  # noqa: E402
+
+DEFAULT_ORGS = os.path.join(ROOT, "orgs", "default.json")
+NS_M, NS_C = "{http://www.infpres.com/IEDMS}", "{http://minsvyaz.ru/container}"
 
 REF_DIR = os.environ.get("MEDO_REF_DIR")
 
@@ -117,6 +126,107 @@ class ReadOld(unittest.TestCase):
         folder = make_26(os.path.join(self.box.name, "p"), name="nope.docx", create_file=False)
         errors = validate.validate_folder(folder)
         self.assertTrue(any("nope.docx" in e for e in errors), errors)
+
+
+
+def build(tmp, packages):
+    """Собирает сценарий; возвращает {name: (папка, манифест)}."""
+    scen = os.path.join(tmp, f"s{len(os.listdir(tmp))}.json")
+    with open(scen, "w", encoding="utf-8") as f:
+        json.dump({"packages": packages}, f, ensure_ascii=False)
+    with contextlib.redirect_stdout(io.StringIO()):
+        built = builder.Run(scen, [DEFAULT_ORGS], os.path.join(tmp, "out")).build_all()
+    return {m["name"]: (f, m) for f, m in built}
+
+
+def xml_root(path):
+    with open(path, "rb") as f:
+        return ET.fromstring(f.read().lstrip(b"\xef\xbb\xbf"))
+
+
+class Build27(unittest.TestCase):
+    BASE = {"format": "2.7", "from": "pravit_mo", "to": ["mo_duma"]}
+
+    def setUp(self):
+        self.box = tempfile.TemporaryDirectory()
+        common.WARNINGS.clear()
+
+    def tearDown(self):
+        self.box.cleanup()
+
+    def one(self, **spec):
+        return build(self.box.name, [{**self.BASE, "name": "p", **spec}])["p"][0]
+
+    def assertValid(self, folder):
+        self.assertEqual(validate.validate_folder(folder), [])
+
+    def test_document_valid(self):
+        folder = self.one(type="document", document={"attachments": [{"pages": 1}, {"pages": 2, "signed": True}]})
+        self.assertValid(folder)
+        self.assertEqual(sorted(os.listdir(folder)), ["container.edc.zip", "envelope.ini", "message.xml"])
+        m = xml_root(os.path.join(folder, "message.xml"))
+        self.assertEqual(m.tag, NS_M + "communication")
+        self.assertEqual(m.get(NS_M + "version"), "2.7")
+        self.assertEqual(m.find(NS_M + "header").get(NS_M + "type"), "Транспортный контейнер")
+        with zipfile.ZipFile(os.path.join(folder, "container.edc.zip")) as z:
+            names = set(z.namelist())
+            p = ET.fromstring(z.read("passport.xml").lstrip(b"\xef\xbb\xbf"))
+        self.assertEqual(p.tag, NS_C + "container")
+        self.assertEqual(p.get(NS_C + "version"), "1.0")
+        self.assertTrue({"passport.xml", "document.pdf", "document_1_SigStamp.sig", "document_1_SigStamp.png",
+                         "document_RegStamp.png", "document_att1.pdf", "document_att2.pdf",
+                         "document_att2.sig"} <= names, names)
+
+    def test_citizen_appeal_valid(self):
+        folder = self.one(type="citizen_appeal", citizen={"last_name": "Петров", "first_name": "Пётр"})
+        self.assertValid(folder)
+        with zipfile.ZipFile(os.path.join(folder, "container.edc.zip")) as z:
+            self.assertIn("CardInfo.txt", z.namelist())
+
+    def test_receipt_accept_and_refuse_valid(self):
+        doc = self.one(type="document")
+        for accepted in (True, False):
+            with self.subTest(accepted=accepted):
+                folder = build(self.box.name, [{"format": "2.7", "name": "r", "type": "receipt", "reply_to": doc,
+                                                "receipt": {"accepted": accepted}}])["r"][0]
+                self.assertValid(folder)
+                m = xml_root(os.path.join(folder, "message.xml"))
+                self.assertEqual(m.find(NS_M + "header").get(NS_M + "type"), "Квитанция")
+                self.assertIsNone(m.find(f"{NS_M}acknowledgment/{NS_M}errorCode"))
+
+    def test_notifications_valid(self):
+        doc = self.one(type="document")
+        for kind in v271.NOTIFICATION_TYPES:
+            if kind == "sent":
+                continue
+            with self.subTest(kind=kind):
+                folder = build(self.box.name, [{"format": "2.7", "name": "n", "type": "notification",
+                                                "reply_to": doc, "notification": {"kind": kind}}])["n"][0]
+                self.assertValid(folder)
+
+    def test_refusal_reason_text_passthrough(self):
+        doc = self.one(type="document")
+        folder = build(self.box.name, [{"format": "2.7", "name": "n", "type": "notification", "reply_to": doc,
+                                        "notification": {"kind": "refused",
+                                                         "reasons": [{"id": "x", "name": "Нет подписи"}, "203"]}}])["n"][0]
+        self.assertValid(folder)
+        self.assertIn("Нет подписи", open(os.path.join(folder, "message.xml"), encoding="utf-8-sig").read())
+        self.assertTrue(any("одна причина" in w for w in common.WARNINGS), common.WARNINGS)
+        with self.assertRaises(MedoError):
+            build(self.box.name, [{"format": "2.7", "name": "n", "type": "notification", "reply_to": doc,
+                                   "notification": {"kind": "refused", "reasons": ["101"]}}])
+
+    def test_errors(self):
+        for t in ("assignment", "gosedo"):
+            with self.subTest(type=t), self.assertRaisesRegex(MedoError, "только в 2.7.1 и 3.0"):
+                self.one(type=t)
+        doc = self.one(type="document")
+        with self.assertRaisesRegex(MedoError, "Поставлен на контроль"):
+            build(self.box.name, [{"format": "2.7", "name": "n", "type": "notification", "reply_to": doc,
+                                   "notification": {"kind": "sent"}}])
+        folder = self.one(type="document", notify_sent={})
+        self.assertValid(folder)
+        self.assertTrue(any("notify_sent" in w for w in common.WARNINGS), common.WARNINGS)
 
 
 if __name__ == "__main__":

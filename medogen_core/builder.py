@@ -4,14 +4,25 @@ import re
 import os
 import shutil
 
-from . import digital, gas, v271, v30
+from . import digital, gas, v27, v271, v30
 from .common import (RECEIPT_REASONS, Clock, Directory, MedoError, Org, Signer, check_guid,
                      load_json, medo_addresses, new_uuid, safe_dir_name, write_envelope, warn)
 from .model import DEFAULT_SIGNER, DocSpec
 from .reply import read_package
 
 TYPES = ("document", "gosedo", "citizen_appeal", "receipt", "notification", "assignment")
-FORMATS = ("2.7.1", "3.0")
+FORMATS = ("2.7.1", "3.0", "2.7", "2.6")
+OLD = ("2.7", "2.6")  # семейства без поручений и ГосЭДО
+
+
+def family(fmt):
+    """Семейство формата: 3.0, 2.7.1, 2.7 или 2.6 (2.0–2.6 собираются по структуре 2.6)."""
+    fmt = str(fmt)
+    if fmt in ("3.0", "2.7.1", "2.7"):
+        return fmt
+    if re.match(r"^2\.[0-6]$", fmt):
+        return "2.6"
+    raise MedoError(f"format: {fmt!r}, допустимо 3.0, 2.7.1, 2.7, 2.6 (и 2.0–2.5 по структуре 2.6)")
 
 
 class Ctx:
@@ -27,11 +38,12 @@ class Ctx:
         self.crypto = run.crypto
         self.started = run.clock.now()
         self.format = str(spec.get("format", "3.0"))
-        if self.format not in FORMATS:
-            raise MedoError(f"format: {self.format!r}, допустимо {', '.join(FORMATS)}")
+        self.family = family(self.format)
         self.type = spec.get("type", "document")
         if self.type not in TYPES:
             raise MedoError(f"type: {self.type!r}, допустимо {', '.join(TYPES)}")
+        if self.family in OLD and self.type in ("assignment", "gosedo"):
+            raise MedoError(f"{self.format}: поручения и ТК ГосЭДО есть только в 2.7.1 и 3.0")
 
         self.reply = None
         src = spec.get("reply_to") or spec.get("based_on")
@@ -151,9 +163,9 @@ def manifest_path(folder):
 
 # --- Сборка по типам -----------------------------------------------------------
 
-def write_message(ctx, folder, msg_bytes, files, receivers):
+def write_message(ctx, folder, msg_bytes, files, receivers, msg_name=None):
     """files: [(имя, bytes)] — ТК; пишет message.xml, ТК и envelope.ini."""
-    msg_name = ctx.run.settings.get("message_file", "message.xml")
+    msg_name = msg_name or ctx.run.settings.get("message_file", "message.xml")
     with open(os.path.join(folder, msg_name), "wb") as f:
         f.write(msg_bytes)
     for name, data in files:
@@ -214,6 +226,12 @@ def _send_271(ctx, folder, msg_uid, doc, extra=(), notification=None):
     msg = v271.message(ctx, "Транспортный контейнер", msg_uid, ctx.to, body="document.edc.zip",
                        notification=notification)
     return write_message(ctx, folder, msg, [("document.edc.zip", zbytes)], ctx.to)
+
+
+def _send_27(ctx, folder, msg_uid, doc, extra=()):
+    zbytes, _ = v27.build_container(ctx, doc, extra)
+    msg = v27.message(ctx, "Транспортный контейнер", msg_uid, ctx.to, body="container.edc.zip")
+    return write_message(ctx, folder, msg, [("container.edc.zip", zbytes)], ctx.to)
 
 
 def _gosedo_enclosures(ctx, doc, include_pdf, extra=()):
@@ -329,14 +347,20 @@ def build_document(ctx, folder, msg_uid):
 
     if ctx.type == "citizen_appeal":
         card = cardinfo(ctx.spec.get("citizen") or {})
-        if ctx.format == "2.7.1":
+        if ctx.family in ("2.7.1", "2.7"):
             extra = [("CardInfo.txt", card, len(doc.attachments), "Данные об авторе обращения")]
         else:
             warn("3.0: CardInfo.txt не предусмотрен форматом, данные автора вложены как "
                  "enclosure_cardinfo.txt — уточните требования получателя")
             extra = [("enclosure_cardinfo.txt", card, "Данные об авторе обращения")]
 
-    if ctx.format == "2.7.1":
+    if ctx.family == "2.7":
+        if ctx.spec.get("notify_sent") is not None:
+            warn("в 2.7/2.6 уведомление нельзя приложить к ТК, notify_sent пропущен")
+        manifest["files"] = _send_27(ctx, folder, msg_uid, doc, extra)
+        return manifest
+
+    if ctx.family == "2.7.1":
         notice = None
         if ctx.spec.get("notify_sent"):
             notice = v271.notification(SentNotice(ctx.spec["notify_sent"], doc), ctx.clock)
@@ -388,7 +412,10 @@ class ReceiptSpec:
 
 def build_receipt(ctx, folder, msg_uid):
     r = ReceiptSpec(ctx)
-    if ctx.format == "2.7.1":
+    if ctx.family in OLD:
+        msg = v27.message(ctx, "Квитанция", msg_uid, ctx.to, version=ctx.format,
+                          acknowledgment=v271.acknowledgment(r, ctx.clock, with_error_code=False))
+    elif ctx.family == "2.7.1":
         msg = v271.message(ctx, "Квитанция", msg_uid, ctx.to, acknowledgment=v271.acknowledgment(r, ctx.clock))
     else:
         msg = v30.message(ctx, msg_uid, ctx.to, receipt=v30.receipt(r), time_limit=_time_limit(ctx))
@@ -438,7 +465,16 @@ class NotificationSpec:
 
 def build_notification(ctx, folder, msg_uid):
     n = NotificationSpec(ctx)
-    if ctx.format == "2.7.1":
+    if ctx.family in OLD:
+        if n.kind == "sent":
+            raise MedoError("уведомления «Поставлен на контроль» нет в схеме 2.7/2.6")
+        if n.kind == "refused" and len(n.reasons) > 1:
+            warn("в 2.7/2.6 у отказа в регистрации одна причина, указана первая")
+            n.reasons = n.reasons[:1]
+        msg = v27.message(ctx, "Уведомление", msg_uid, ctx.to, version=ctx.format,
+                          notification=v271.notification(n, ctx.clock, reason=v27.refusal_text))
+        return {"doc_uid": n.document_uid, "files": write_message(ctx, folder, msg, [], ctx.to)}
+    if ctx.family == "2.7.1":
         msg = v271.message(ctx, "Уведомление", msg_uid, ctx.to, notification=v271.notification(n, ctx.clock))
         return {"doc_uid": n.document_uid, "files": write_message(ctx, folder, msg, [], ctx.to)}
     if n.kind not in ("registered", "refused"):
@@ -532,7 +568,7 @@ def build_assignment(ctx, folder, msg_uid):
         dig = digital.build(digital.DOC_NOTICE, doc.uid, ctx.sender, when, messages, True, False,
                             signers=doc.signers, fixed_template=digital.NOTICE_TEMPLATE)
 
-    if ctx.format == "2.7.1":
+    if ctx.family == "2.7.1":
         notice = None
         if event == "issue" and ctx.spec.get("notify_sent", {}) is not None:
             notice = v271.notification(SentNotice(ctx.spec.get("notify_sent") or {}, doc), ctx.clock)
