@@ -158,6 +158,20 @@ class App:
         self._write_json(path, data)
         return {"file": os.path.basename(path)}
 
+    def delete_stand(self, body):
+        """Устаревший стенд переносится в orgs/_deleted/<имя>_<время>.json; вернуть — перенести файл обратно."""
+        path = self.stand_path(body.get("stand"))
+        name = os.path.basename(path)
+        if name == "default.json":
+            raise MedoError("стенд-пример default.json не удаляется: на нём работают тесты и примеры")
+        if not os.path.isfile(path):
+            raise MedoError(f"стенд {name} не найден")
+        trash = os.path.join(self.orgs_dir, "_deleted")
+        os.makedirs(trash, exist_ok=True)
+        target = os.path.join(trash, f"{os.path.splitext(name)[0]}_{_stamp()}.json")
+        shutil.move(path, target)
+        return {"moved_to": target}
+
     def import_orgs(self, body):
         src = self.inside(body["upload"], self.uploads)
         path = self.stand_path(body.get("file") or "imported")
@@ -621,6 +635,7 @@ def make_handler(app):
                 "/api/orgs/save": app.save_org,
                 "/api/orgs/delete": app.delete_org,
                 "/api/orgs/new": app.new_stand,
+                "/api/orgs/delete-stand": app.delete_stand,
                 "/api/orgs/import": app.import_orgs,
                 "/api/gas/import": app.gas_import,
                 "/api/exchange/save": app.exchange_save,

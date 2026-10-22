@@ -13,3 +13,4 @@ venv/
 .idea/
 Thumbs.db
 .DS_Store
+orgs/_deleted/

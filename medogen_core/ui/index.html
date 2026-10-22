@@ -1103,7 +1103,13 @@ function renderOrgs() {
   const list = h("div", { class: "card" }, h("h2", {}, `Организации стенда «${ORGS.stand || ORGS.file}»`),
     h("div", { class: "hint", style: "margin:0 0 10px" }, `Файл orgs\\${ORGS.file}. GUID берутся из ГАС ГосЭДО или со своего стенда; адрес МЭДО нужен для envelope.ini.`));
   const q = h("input", { placeholder: "Поиск", oninput: () => fill() });
-  list.append(h("div", { class: "filters" }, q));
+  const delStand = ORGS.file !== "default.json" ? h("button", { class: "btn small danger", type: "button", title: "Файл стенда переносится в orgs\\_deleted, его можно вернуть", onclick: async () => {
+    if (!confirm(`Удалить стенд «${ORGS.stand || ORGS.file}»? Файл orgs\\${ORGS.file} будет перенесён в orgs\\_deleted.`)) return;
+    try { await api("/api/orgs/delete-stand", { stand: currentStand() }); await loadMeta();
+      const next = META.stands.some(s => s.file === "default.json") ? "default.json" : (META.stands[0]?.file || "default.json");
+      await setStand(next); toast("Стенд удалён (перенесён в orgs\\_deleted)"); }
+    catch (err) { toast(err.message); } } }, "Удалить стенд") : null;
+  list.append(h("div", { class: "filters" }, q, delStand));
   const tbody = h("tbody");
   list.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Организация"), h("th", {}, "GUID"), h("th", {}, "Адрес МЭДО"), h("th", {}))), tbody)));
   function fill() {
