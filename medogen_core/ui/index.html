@@ -937,7 +937,7 @@ async function buildReplies() {
   const scenario = { packages };
   const gasName = RP_GAS && RP_GAS.guid === src.guid ? RP_GAS.name : null;
   if (RP.addr && src.guid) scenario.orgs = { reply_to: { guid: src.guid, name: gasName || src.name || src.guid, address: RP.addr.trim() } };
-  RP_BUSY = true; renderReplies();
+  RP_BUSY = true; RP_RESULT = null; renderReplies();
   try {
     if (RP.save_addr && !gasName && RP.addr && src.guid && !ORGS.orgs.some(o => o.guid === src.guid)) {
       ORGS = await api("/api/orgs/save", { stand: currentStand(), org: { key: "o_" + src.guid.slice(0, 8), guid: src.guid, name: src.name || src.guid, address: RP.addr.trim() } });

@@ -16,8 +16,17 @@ def paths(stand):
         return None
     archive = (ex.get("archive") or "").strip()
     if not archive and out:
-        archive = os.path.join(os.path.dirname(os.path.normpath(out)), "OUTArchive")
+        archive = sibling_archive(out)
     return {"out": out, "archive": archive, "in": inn}
+
+
+def sibling_archive(out, pathmod=os.path):
+    r"""OUTArchive рядом с OUT. Если OUT — корень общей папки (\\srv\OUT), это общая папка OUTArchive."""
+    out = out.rstrip("\\/") or out
+    drive, rest = pathmod.splitdrive(out)
+    if drive.startswith(("\\\\", "//")) and not rest.strip("\\/"):
+        return drive + "Archive"
+    return pathmod.join(pathmod.dirname(out), "OUTArchive")
 
 
 def _is_package(folder):
@@ -62,11 +71,17 @@ def take(out_dir, archive_dir, name, dest_dir):
 
     Возвращает (папка копии, путь в архиве или None, текст ошибки переноса или None).
     Копия делается первой, поэтому сбой переноса пакет не теряет."""
-    if not name or name in (".", "..") or name != os.path.basename(name.replace("\\", "/")):
+    if not isinstance(name, str) or not name or name.startswith((".", "_")) or any(c in name for c in "\\/:"):
         raise MedoError(f"недопустимое имя пакета: {name!r}")
+    try:
+        present = name in os.listdir(out_dir)
+    except OSError as e:
+        raise MedoError(f"нет доступа к {out_dir}: {e}")
     src = os.path.join(out_dir, name)
-    if not os.path.isdir(src):
+    if not present or not os.path.isdir(src):
         raise MedoError(f"пакет уже забран или не найден: {name}")
+    if not _is_package(src):
+        raise MedoError(f"в папке {name} нет envelope.ini, это не пакет")
     try:
         shutil.copytree(src, dest_dir)
     except OSError as e:
@@ -81,6 +96,19 @@ def take(out_dir, archive_dir, name, dest_dir):
     return dest_dir, archived, None
 
 
+def _copy_package(src, dst):
+    """Копия папки пакета; envelope.ini пишется последним, чтобы СЭД не приняла недописанную папку за пакет."""
+    os.makedirs(dst)
+    names = [n for n in os.listdir(src) if n != "manifest.json"]
+    names.sort(key=lambda n: n.lower() == "envelope.ini")
+    for n in names:
+        s = os.path.join(src, n)
+        if os.path.isdir(s):
+            shutil.copytree(s, os.path.join(dst, n))
+        else:
+            shutil.copy2(s, os.path.join(dst, n))
+
+
 def put_in(package_dir, in_dir):
     """Кладёт папку пакета в IN под тем же именем: сначала во временную папку, затем переименование."""
     name = os.path.basename(os.path.normpath(package_dir))
@@ -90,7 +118,7 @@ def put_in(package_dir, in_dir):
     tmp = os.path.join(in_dir, f".{name}.medogen-tmp")
     try:
         shutil.rmtree(tmp, ignore_errors=True)
-        shutil.copytree(package_dir, tmp, ignore=shutil.ignore_patterns("manifest.json"))
+        _copy_package(package_dir, tmp)
         os.rename(tmp, target)
     except OSError as e:
         shutil.rmtree(tmp, ignore_errors=True)

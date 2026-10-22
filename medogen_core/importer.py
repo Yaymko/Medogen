@@ -148,6 +148,13 @@ def read_text(src):
 def import_file(src, dst, stand=None):
     orgs = parse(read_text(src), src)
     data = {"stand": stand or "imported", "self": None, "orgs": orgs}
+    try:  # повторный импорт в существующий стенд сохраняет папки обмена с СЭД
+        with open(dst, encoding="utf-8-sig") as f:
+            old = json.load(f)
+        if old.get("exchange"):
+            data["exchange"] = old["exchange"]
+    except (OSError, ValueError):
+        pass
     with open(dst, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return len(orgs)

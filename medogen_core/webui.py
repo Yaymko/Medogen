@@ -28,6 +28,7 @@ from .reply import read_package
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 LOCK = threading.Lock()
+EXCHANGE_LOCK = threading.Lock()  # операции с сетевыми папками СЭД не держат LOCK сборки
 
 TYPE_TITLES = {
     "document": "Исходящий документ",
@@ -368,7 +369,7 @@ class App:
     def exchange_check(self, body):
         p = self._exchange_paths(body.get("stand"))
         res = {}
-        with LOCK:
+        with EXCHANGE_LOCK:
             for key in ("out", "archive", "in"):
                 folder = p[key]
                 if not folder:
@@ -399,11 +400,25 @@ class App:
     def exchange_take(self, body):
         p = self._exchange_paths(body.get("stand"))
         name = body.get("name") or ""
-        with LOCK:
+        with EXCHANGE_LOCK:
             dest = os.path.join(self.incoming, safe_dir_name(f"{_stamp()}_{name}"))
             copy, archived, err = exchange.take(p["out"], p["archive"], name, dest)
         return {"package": self.package_card(self._find_package_root(copy)),
                 "archived": archived, "archive_error": err}
+
+    def _mark_sent_in(self, folder, path):
+        """Отметка «положен в IN» в манифесте; ошибка записи отметки не отменяет саму отправку."""
+        try:
+            mpath = builder.manifest_path(folder)
+            old = os.path.join(folder, "manifest.json")  # пакеты старых версий
+            src = mpath if os.path.isfile(mpath) else old if os.path.isfile(old) else None
+            man = load_json(src) if src else {}
+            man.setdefault("sent_in", []).append({"at": dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "path": path})
+            with open(mpath, "w", encoding="utf-8") as f:
+                json.dump(man, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            return f"пакет положен в IN, но отметка не записана: {e}"
+        return None
 
     def exchange_put(self, body):
         p = self._exchange_paths(body.get("stand"))
@@ -413,22 +428,21 @@ class App:
         for pid in body.get("ids") or []:
             item = {"id": pid, "ok": False}
             try:
-                if pid.startswith("_incoming/"):
-                    raise MedoError("входящий пакет в IN не кладётся")
                 folder = self.pkg_path(pid)
+                if self.pkg_id(folder).split("/")[0] in ("_incoming", "_uploads", "_scenarios", "_manifests"):
+                    raise MedoError("входящий пакет в IN не кладётся")
                 if validate.validate_folder(folder, []):
                     raise MedoError("в пакете ошибки проверки, в IN не положен")
-                with LOCK:
+                with EXCHANGE_LOCK:
                     item["path"] = exchange.put_in(folder, p["in"])
-                    mpath = builder.manifest_path(folder)
-                    man = load_json(mpath) if os.path.isfile(mpath) else {}
-                    man.setdefault("sent_in", []).append(
-                        {"at": dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "path": item["path"]})
-                    with open(mpath, "w", encoding="utf-8") as f:
-                        json.dump(man, f, ensure_ascii=False, indent=2)
                 item["ok"] = True
+                warn = self._mark_sent_in(folder, item["path"])
+                if warn:
+                    item["warning"] = warn
             except MedoError as e:
                 item["error"] = str(e)
+            except Exception as e:  # один плохой пакет не должен срывать остальные
+                item["error"] = f"{type(e).__name__}: {e}"
             results.append(item)
         return {"results": results}
 

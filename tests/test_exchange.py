@@ -136,6 +136,36 @@ class ExchangeModule(unittest.TestCase):
         shutil.rmtree(path)  # СЭД забрала пакет
         self.assertEqual(exchange.put_in(self.p30, self.inn), path)
 
+    def test_take_rejects_drive_relative_and_non_packages(self):
+        # по ревью: на Windows os.path.join(OUT, "C:x") уходит за пределы OUT
+        self.put_out(self.p30, "_svc")
+        os.makedirs(os.path.join(self.out, "notpkg"))
+        for bad in ("C:", "C:notpkg", "_svc", "notpkg"):
+            with self.subTest(name=bad), self.assertRaises(MedoError):
+                exchange.take(self.out, self.arch, bad, os.path.join(self.dest, "c"))
+        self.assertTrue(os.path.isdir(os.path.join(self.out, "_svc")))
+
+    def test_put_in_copies_envelope_last(self):
+        # по ревью: СЭД ищет папки с envelope.ini, он должен появиться последним
+        order = []
+        real = shutil.copy2
+        def spy(src, dst, *a, **k):
+            order.append(os.path.basename(src))
+            return real(src, dst, *a, **k)
+        shutil.copy2 = spy
+        try:
+            exchange.put_in(self.p30, self.inn)
+        finally:
+            shutil.copy2 = real
+        self.assertEqual(order[-1], "envelope.ini")
+        self.assertGreater(len(order), 1)
+
+    def test_default_archive_for_share_root(self):
+        import ntpath
+        self.assertEqual(exchange.sibling_archive(r"\\srv\MEDO\OUT", ntpath), r"\\srv\MEDO\OUTArchive")
+        self.assertEqual(exchange.sibling_archive(r"\\srv\OUT", ntpath), r"\\srv\OUTArchive")
+        self.assertEqual(exchange.sibling_archive("D:\\MEDO\\OUT\\", ntpath), "D:\\MEDO\\OUTArchive")
+
     def test_paths_default_archive(self):
         p = exchange.paths({"exchange": {"out": "/x/OUT", "in": "/x/IN"}})
         self.assertEqual(p["archive"], os.path.join("/x", "OUTArchive"))
@@ -212,6 +242,29 @@ class AppExchange(unittest.TestCase):
         self.assertEqual(res[0]["path"], target)
         again = self.app.package_card(card["folder"], with_errors=False)
         self.assertEqual(again["sent_in"][-1]["path"], target)
+
+    def test_put_batch_survives_bad_item(self):
+        card = self.build()
+        res = self.app.exchange_put({"stand": "default.json", "ids": [123, card["id"]]})["results"]
+        self.assertEqual([x["ok"] for x in res], [False, True])
+
+    def test_put_refuses_disguised_incoming_id(self):
+        card = self.build()
+        name = os.path.basename(card["folder"])
+        shutil.copytree(card["folder"], os.path.join(self.out, name))
+        inc = self.app.exchange_take({"stand": "default.json", "name": name})["package"]
+        for pid in ("./" + inc["id"], "x/../" + inc["id"]):
+            res = self.app.exchange_put({"stand": "default.json", "ids": [pid]})["results"]
+            self.assertFalse(res[0]["ok"], pid)
+        self.assertEqual(os.listdir(self.inn), [])
+
+    def test_import_orgs_keeps_exchange(self):
+        from medogen_core import importer
+        src = os.path.join(self.box.name, "orgs.csv")
+        with open(src, "w", encoding="utf-8") as f:
+            f.write("Минфин;11111111-2222-3333-4444-555555555555;M_MINFIN~MEDOGU\n")
+        importer.import_file(src, os.path.join(self.root, "orgs", "default.json"))
+        self.assertEqual(self.app.orgs("default.json")["exchange"]["out"], self.out)
 
     def test_check_and_out_report_unreachable(self):
         missing = os.path.join(self.box.name, "no-such-share", "OUT")
