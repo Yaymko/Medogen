@@ -796,6 +796,8 @@ function packageView(p, opts = {}) {
   const files = h("ul", { class: "files" }, ...(p.files || []).map(f => h("li", {},
     h("a", { onclick: () => viewFile(p.id, f.name) }, f.name), h("span", { class: "muted small" }, "  " + fmtSize(f.size)),
     f.entries ? h("ul", {}, ...f.entries.map(e => h("li", {}, h("a", { onclick: () => viewFile(p.id, f.name, e.name) }, e.name), h("span", { class: "muted small" }, "  " + fmtSize(e.size))))) : null)));
+  const rel = relatedView(p);
+  if (rel) wrap.append(rel);
   wrap.append(h("div", { class: "small muted" }, "Файлы (нажмите, чтобы посмотреть)"), files);
   const replyBtn = (label, type, extra = {}) => h("button", { class: "btn small", type: "button", onclick: () => startReply(p, type, extra) }, label);
   const isAssign = p.type === "assignment" || (p.type === "incoming" && p.process_uid);
@@ -1000,6 +1002,28 @@ async function putIn(ids) {
   return r.results;
 }
 const PF = { q: "", type: "", format: "" };
+function relLink(id, label) {
+  return h("a", { style: "color:var(--accent);cursor:pointer", onclick: e => { e.stopPropagation(); openPackage(id); } }, label);
+}
+
+function relLabel(c) {
+  return `${typeTitle(c)}${c.reg_number ? " №" + c.reg_number : ""}, ${c.created}`;
+}
+
+// Связанные пакеты: основание и ответы (сведения о связях приходят в списке /api/packages)
+function relatedView(p) {
+  const me = PACKAGES.find(x => x.id === p.id) || p;
+  const parent = me.parent_id && PACKAGES.find(x => x.id === me.parent_id);
+  const kids = (me.children || []).map(id => PACKAGES.find(x => x.id === id)).filter(Boolean);
+  if (!parent && !me.parent && !kids.length) return null;
+  const box = h("div", { class: "msg small", style: "margin:8px 0" }, h("b", {}, "Связанные пакеты"));
+  if (parent) box.append(h("div", {}, "Основание: ", relLink(parent.id, relLabel(parent))));
+  else if (me.parent) box.append(h("div", { class: "muted" }, "Основание: пакет удалён (msgUid ", guid(me.parent.msg_uid), ")"));
+  if (kids.length) box.append(h("div", {}, `Ответы (${kids.length}):`, h("ul", {}, ...kids.map(c => h("li", {},
+    relLink(c.id, relLabel(c)), c.sent_in?.length ? h("span", { class: "pill ok", style: "margin-left:6px" }, "в IN") : null)))));
+  return box;
+}
+
 function renderPackages() {
   const root = $("#tab-packages"); root.innerHTML = "";
   const list = h("div", { class: "card" }, h("h2", {}, "Собранные и входящие пакеты"));
@@ -1018,18 +1042,25 @@ function renderPackages() {
     h("button", { class: "btn", type: "button", onclick: async () => { await loadPackages(); renderPackages(); } }, "Обновить")));
   list.append(h("div", { class: "hint", style: "margin:-2px 0 10px" }, "Пакет из СЭД можно перетащить сюда: архив .zip или сразу файлы пакета. После загрузки он проверяется, и к нему можно сформировать квитанции и уведомления."));
   const tbody = h("tbody");
-  list.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Создан"), h("th", {}, "Тип"), h("th", {}, "Формат"), h("th", {}, "От → кому"), h("th", {}, "Документ"), h("th", {}, "Забран со стенда"))), tbody)));
+  list.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Создан"), h("th", {}, "Тип"), h("th", {}, "Формат"), h("th", {}, "От → кому"), h("th", {}, "Документ"), h("th", {}, "Основание"), h("th", {}, "Забран со стенда"))), tbody)));
   function fill() {
     tbody.innerHTML = "";
     const qq = PF.q.toLowerCase();
     const rows = PACKAGES.filter(p => (!PF.type || p.type === PF.type) && (!PF.format || p.format === PF.format) &&
-      (!qq || JSON.stringify([p.name, p.reg_number, p.msg_uid, p.doc_uid, p.from, p.to, p.id, p.taken_from?.stand]).toLowerCase().includes(qq)));
-    if (!rows.length) tbody.append(h("tr", {}, h("td", { colspan: 6, class: "empty" }, PACKAGES.length ? "Ничего не найдено" : "Пакетов пока нет")));
+      (!qq || JSON.stringify([p.name, p.reg_number, p.msg_uid, p.doc_uid, p.from, p.to, p.id, p.parent_id, p.taken_from?.stand]).toLowerCase().includes(qq)));
+    if (!rows.length) tbody.append(h("tr", {}, h("td", { colspan: 7, class: "empty" }, PACKAGES.length ? "Ничего не найдено" : "Пакетов пока нет")));
     rows.forEach(p => tbody.append(h("tr", { class: "click" + (p.id === PKG_SEL ? " sel" : ""), onclick: () => openPackage(p.id) },
       h("td", { class: "small" }, p.created), h("td", {}, typeTitle(p)), h("td", {}, p.format || "?"),
       h("td", { class: "small" }, (p.from?.name || "—") + " → " + ((p.to || []).map(o => o.name).join(", ") || "—")),
       h("td", { class: "small" }, p.reg_number ? `№${p.reg_number}` : ""),
+      h("td", { class: "small" }, baseCell(p)),
       h("td", { class: "small", title: p.taken_from ? `${p.taken_from.out}, ${p.taken_from.at}` : "" }, p.taken_from?.stand || ""))));
+  }
+  function baseCell(p) {
+    const parent = p.parent_id && PACKAGES.find(x => x.id === p.parent_id);
+    const n = (p.children || []).length;
+    return [parent ? relLink(parent.id, "↳ " + typeTitle(parent) + (parent.reg_number ? " №" + parent.reg_number : "")) : p.parent ? h("span", { class: "muted" }, "основание удалено") : null,
+      n ? h("div", { class: "muted" }, `ответов: ${n}`) : null];
   }
   fill();
   const detail = h("div", { class: "card sticky" }, h("h2", {}, "Пакет"));

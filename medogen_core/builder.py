@@ -180,6 +180,10 @@ def build_package(ctx, folder):
     manifest = builder(ctx, folder, msg_uid)
     manifest.update({"format": ctx.format, "type": ctx.type, "msg_uid": msg_uid,
                      "from": org_json(ctx.sender), "to": [org_json(o) for o in ctx.to]})
+    if ctx.reply:  # основной пакет, на основании которого собран этот (для связей в интерфейсе)
+        manifest["parent"] = {"kind": "reply_to" if ctx.spec.get("reply_to") else "based_on",
+                              "folder": os.path.abspath(ctx.reply["folder"]),
+                              "msg_uid": ctx.reply.get("msg_uid")}
     return manifest
 
 

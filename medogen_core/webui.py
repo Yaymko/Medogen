@@ -321,6 +321,7 @@ class App:
                     cards.append(self.package_card(folder, with_errors=False))
                 except Exception:
                     continue
+        _link(cards)
         cards.sort(key=lambda c: os.path.getmtime(c["folder"]), reverse=True)
         return cards[:300]
 
@@ -530,6 +531,28 @@ class App:
         result["log"] = log.getvalue()
         result["scenario"] = scenario if not body.get("example") else load_json(path)
         return result
+
+
+def _link(cards):
+    """parent_id у ответа и children у основного пакета. Основание ищется по папке из манифеста,
+    затем по GUID сообщения; у старых квитанций без parent — по GUID сообщения, на которое они отвечают."""
+    by_folder = {os.path.normcase(os.path.abspath(c["folder"])): c for c in cards}
+    by_msg = {}
+    for c in cards:
+        if c.get("msg_uid"):
+            by_msg.setdefault(c["msg_uid"].lower(), c)
+    for c in cards:
+        c.setdefault("children", [])
+    for c in cards:
+        par, ref = c.get("parent") or {}, None
+        if par.get("folder"):
+            ref = by_folder.get(os.path.normcase(os.path.abspath(par["folder"])))
+        uid = par.get("msg_uid") or (c.get("on_msg_uid") if c.get("type") == "receipt" else None)
+        if ref is None and uid:
+            ref = by_msg.get(uid.lower())
+        if ref is not None and ref is not c:
+            c["parent_id"] = ref["id"]
+            ref["children"].append(c["id"])
 
 
 def _stamp():
