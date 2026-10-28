@@ -9,6 +9,8 @@ import time
 from . import exchange, validate
 from .common import MedoError, dir_stamp, safe_dir_name
 
+SETTLE = 5  # секунд без изменений, прежде чем пакет считается дописанным
+
 
 def last_change(folder):
     """Самое позднее время изменения папки и всего, что в ней лежит."""
@@ -22,7 +24,7 @@ def last_change(folder):
     return latest
 
 
-def route_once(src, dst_in, incoming_dir, settle=5):
+def route_once(src, dst_in, incoming_dir, settle=SETTLE):
     """Один проход: всё устоявшееся из src["out"] — во входящие, правильное — в dst_in.
 
     Возвращает записи по пакетам, от старых к новым. Нет доступа к OUT — MedoError."""

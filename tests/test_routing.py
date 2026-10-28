@@ -180,5 +180,120 @@ class RouterModule(unittest.TestCase):
             self.run_once()
 
 
+class AppRouting(unittest.TestCase):
+    """Два стенда s1 и s2 со своими папками и маршрутами друг на друга."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        built = build(cls.tmp.name, [
+            {"name": "doc", "format": "3.0", "type": "document", "from": "pravit_mo", "to": ["mo_duma"]},
+            {"name": "receipt_ok", "format": "3.0", "type": "receipt", "reply_to": "@doc",
+             "receipt": {"accepted": True}},
+            {"name": "registered", "format": "3.0", "type": "notification", "reply_to": "@doc",
+             "notification": {"kind": "registered", "number": "ВХ-1", "date": "today"}},
+            {"name": "answer", "format": "3.0", "type": "document", "reply_to": "@doc",
+             "from": "mo_duma", "to": ["pravit_mo"]}])
+        cls.doc, cls.replies = built[0], built[1:]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        from medogen_core import webui
+        self.box = tempfile.TemporaryDirectory()
+        b = self.box.name
+        self.root = os.path.join(b, "root")
+        os.makedirs(os.path.join(self.root, "orgs"))
+        self.dirs = {}
+        for s, other in (("s1", "s2.json"), ("s2", "s1.json")):
+            shutil.copy(DEFAULT_ORGS, os.path.join(self.root, "orgs", s + ".json"))
+            d = {k: os.path.join(b, s, k.upper()) for k in ("out", "in")}
+            for p in d.values():
+                os.makedirs(p)
+            self.dirs[s] = d
+        self.app = webui.App(self.root)
+        self.app.route_settle = 0
+        for s, other in (("s1", "s2.json"), ("s2", "s1.json")):
+            self.save(s, route_to=other)
+
+    def save(self, s, **kw):
+        ex = {"out": self.dirs[s]["out"], "in": self.dirs[s]["in"], "route_to": "", "route_auto": True}
+        ex.update(kw)
+        self.app.exchange_save({"stand": s + ".json", "exchange": ex})
+
+    def tearDown(self):
+        self.box.cleanup()
+
+    def test_route_sends_and_logs(self):
+        name = put(self.doc, self.dirs["s1"]["out"])
+        res = self.app.route("s1.json")["results"]
+        self.assertEqual([r["status"] for r in res], ["sent"])
+        self.assertEqual(os.listdir(self.dirs["s2"]["in"]), [name])
+        item = self.app.route_journal()["items"][0]
+        self.assertEqual((item["status"], item["from"], item["to"]), ("sent", "s1.json", "s2.json"))
+        self.assertTrue(item["id"].startswith("_incoming/"))
+        card = next(c for c in self.app.packages() if c["id"] == item["id"])
+        self.assertEqual(card["taken_from"]["stand_file"], "s1.json")
+        self.assertEqual(card["taken_from"]["route"]["status"], "sent")
+        st = next(r for r in self.app.routes()["routes"] if r["from"] == "s1.json")["state"]
+        self.assertEqual(st["sent"], 1)
+        self.assertTrue(st["last_run"])
+
+    def test_return_path(self):
+        doc = put(self.doc, self.dirs["s1"]["out"])
+        answers = sorted(put(p, self.dirs["s2"]["out"]) for p in self.replies)
+        self.app.route_all_auto()
+        self.assertEqual(os.listdir(self.dirs["s2"]["in"]), [doc])
+        self.assertEqual(sorted(os.listdir(self.dirs["s1"]["in"])), answers)
+        self.assertEqual(len(answers), 3)
+
+    def test_config_errors(self):
+        cases = [("s1.json", "на самого себя"), ("nope.json", "не найден"), ("s2.json", "не задана папка IN")]
+        for target, text in cases:
+            with self.subTest(target=target):
+                self.save("s2", **{"in": ""}) if target == "s2.json" else self.save("s2")
+                self.save("s1", route_to=target)
+                r = next(r for r in self.app.routes()["routes"] if r["from"] == "s1.json")
+                self.assertIn(text, r["error"] or "")
+                with self.assertRaisesRegex(MedoError, text):
+                    self.app.route("s1.json")
+
+    def test_unreachable_does_not_stop_others(self):
+        self.save("s1", route_to="s2.json", out=os.path.join(self.box.name, "no-such", "OUT"))
+        with open(os.path.join(self.root, "orgs", "bad.json"), "w") as f:
+            f.write("{broken")
+        name = put(self.replies[0], self.dirs["s2"]["out"])
+        self.app.route_all_auto()
+        st = next(r for r in self.app.routes()["routes"] if r["from"] == "s1.json")["state"]
+        self.assertIn("нет доступа", st["last_error"])
+        self.assertEqual(os.listdir(self.dirs["s1"]["in"]), [name])
+
+    def test_resend_from_journal(self):
+        name = put(self.doc, self.dirs["s1"]["out"])
+        break_package(os.path.join(self.dirs["s1"]["out"], name))
+        self.app.route("s1.json")
+        item = self.app.route_journal()["items"][0]
+        self.assertEqual(item["status"], "invalid")
+        self.assertEqual(os.listdir(self.dirs["s2"]["in"]), [])
+        r = self.app.route_resend({"id": item["id"]})
+        self.assertEqual(r["path"], os.path.join(self.dirs["s2"]["in"], name))
+        self.assertEqual(self.app.route_journal()["items"][0]["status"], "resent")
+        built = self.app.build({"stand": "s1.json", "scenario": {
+            "format": "3.0", "type": "document", "from": "pravit_mo", "to": ["mo_duma"]}})["packages"][0]
+        with self.assertRaises(MedoError):
+            self.app.route_resend({"id": built["id"]})
+
+    def test_parallel_runs_send_once(self):
+        put(self.doc, self.dirs["s1"]["out"])
+        ts = [threading.Thread(target=self.app.route, args=("s1.json",)) for _ in range(2)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+        self.assertEqual(len(os.listdir(self.dirs["s2"]["in"])), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

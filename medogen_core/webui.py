@@ -21,7 +21,7 @@ import webbrowser
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import builder, digital, exchange, gas, importer, v27, v271, validate
+from . import builder, digital, exchange, gas, importer, router, v27, v271, validate
 from .common import (CLASSES, KINDS, PLACES, RECEIPT_REASONS, REFUSAL_REASONS, WARNINGS,
                      Directory, MedoError, dir_stamp, load_json, safe_dir_name)
 from .reply import read_package
@@ -53,6 +53,9 @@ class App:
         self.scenarios = os.path.join(self.work, "_scenarios")
         for d in (self.work, self.incoming, self.uploads, self.scenarios):
             os.makedirs(d, exist_ok=True)
+        self.journal = os.path.join(self.work, "_routing", "journal.jsonl")
+        self.route_settle = router.SETTLE
+        self.route_state = {}  # стенд-отправитель → состояние маршрута с запуска
 
     # --- пути -------------------------------------------------------------------
 
@@ -493,6 +496,136 @@ class App:
             results.append(item)
         return {"results": results}
 
+    # --- маршрутизация между стендами ---------------------------------------------------------
+
+    def _stand_files(self):
+        return sorted(os.path.basename(p) for p in glob.glob(os.path.join(self.orgs_dir, "*.json")))
+
+    def _route_config(self, stand_file):
+        """(пути отправителя, папка IN получателя, ошибка конфигурации) для маршрута стенда."""
+        p = exchange.paths(load_json(self.stand_path(stand_file))) or {}
+        to = p.get("route_to") or ""
+        if not to:
+            return p, None, "маршрут не задан"
+        if not p.get("out"):
+            return p, None, "у стенда не задана папка OUT"
+        if os.path.basename(self.stand_path(to)) == os.path.basename(self.stand_path(stand_file)):
+            return p, None, "маршрут на самого себя"
+        target = self.stand_path(to)
+        if not os.path.isfile(target):
+            return p, None, f"стенд-получатель не найден: {to}"
+        q = exchange.paths(load_json(target)) or {}
+        if not q.get("in"):
+            return p, None, "у стенда-получателя не задана папка IN"
+        return p, q["in"], None
+
+    def _state(self, stand_file):
+        return self.route_state.setdefault(stand_file, {"last_run": None, "last_error": None,
+                                                        "sent": 0, "invalid": 0, "failed": 0})
+
+    def routes(self):
+        items = []
+        for f in self._stand_files():
+            try:
+                data = load_json(self.stand_path(f))
+                p = exchange.paths(data) or {}
+            except Exception:  # битый файл стенда не мешает остальным
+                continue
+            if not p.get("route_to"):
+                continue
+            _p, _in, err = self._route_config(f)
+            to = p["route_to"]
+            to_title = ""
+            if os.path.isfile(self.stand_path(to)):
+                try:
+                    to_title = load_json(self.stand_path(to)).get("stand") or ""
+                except Exception:
+                    pass
+            items.append({"from": f, "from_title": data.get("stand") or "", "to": to, "to_title": to_title,
+                          "auto": p["route_auto"], "state": dict(self._state(f)), "error": err})
+        return {"routes": items}
+
+    def _log(self, rec):
+        os.makedirs(os.path.dirname(self.journal), exist_ok=True)
+        with open(self.journal, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+    def route(self, stand):
+        stand_file = os.path.basename(self.stand_path(stand))
+        p, dst_in, err = self._route_config(stand_file)
+        if err:
+            raise MedoError(err)
+        to = os.path.basename(self.stand_path(p["route_to"]))
+        state = self._state(stand_file)
+        with EXCHANGE_LOCK:
+            state["last_run"] = dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+            try:
+                results = router.route_once(p, dst_in, self.incoming, self.route_settle)
+            except MedoError as e:
+                state["last_error"] = str(e)
+                raise
+            state["last_error"] = None
+            title = self.orgs(stand_file).get("stand") or stand_file
+            for rec in results:
+                rec.update({"from": stand_file, "to": to})
+                if rec["copy"]:
+                    rec["id"] = self.pkg_id(rec["copy"])
+                    self._write_taken(rec["copy"], {
+                        "stand_file": stand_file, "stand": title, "out": p["out"], "archived": rec["archived"],
+                        "at": rec["at"], "route": {"to": to, "name": rec["name"], "status": rec["status"],
+                                  "in_path": rec["in_path"]}})
+                key = {"sent": "sent", "invalid": "invalid"}.get(rec["status"], "failed")
+                state[key] += 1
+                self._log(rec)
+        return {"results": results}
+
+    def route_all_auto(self):
+        for f in self._stand_files():
+            try:
+                p = exchange.paths(load_json(self.stand_path(f))) or {}
+                if not p.get("route_auto") or self._route_config(f)[2]:
+                    continue
+            except Exception:  # битый файл стенда не мешает остальным
+                continue
+            try:
+                self.route(f)
+            except Exception as e:  # сбой одного маршрута не останавливает остальные
+                self._state(f)["last_error"] = str(e) or type(e).__name__
+
+    def route_journal(self, limit=200):
+        if not os.path.isfile(self.journal):
+            return {"items": []}
+        with open(self.journal, encoding="utf-8") as f:
+            lines = f.readlines()[-limit:]
+        items = []
+        for line in reversed(lines):
+            try:
+                items.append(json.loads(line))
+            except ValueError:
+                continue
+        return {"items": items}
+
+    def route_resend(self, body):
+        pid = body.get("id") or ""
+        folder = self.pkg_path(pid)
+        tpath = self._taken_path(folder)
+        info = load_json(tpath) if tpath and os.path.isfile(tpath) else {}
+        route = info.get("route")
+        if not route:
+            raise MedoError("пакет не забран маршрутизатором, переслать его нельзя")
+        _p, dst_in, err = self._route_config(info["stand_file"])
+        if err:
+            raise MedoError(err)
+        name = route.get("name") or os.path.basename(folder)
+        with EXCHANGE_LOCK:
+            path = router.resend(folder, dst_in, name)
+        route.update({"status": "resent", "in_path": path})
+        self._write_taken(folder, info)
+        self._log({"at": dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "name": name, "id": pid,
+                   "from": info["stand_file"], "to": route["to"], "status": "resent", "in_path": path,
+                   "copy": folder, "errors": [], "warnings": []})
+        return {"path": path}
+
     # --- сборка ---------------------------------------------------------------------------
 
     def _fix_refs(self, spec):
@@ -626,6 +759,10 @@ def make_handler(app):
                 return self._send(200, app.orgs(q.get("stand")))
             if path == "/api/packages":
                 return self._send(200, app.packages())
+            if path == "/api/routes":
+                return self._send(200, app.routes())
+            if path == "/api/routes/journal":
+                return self._send(200, app.route_journal())
             if path == "/api/exchange/out":
                 return self._send(200, app.exchange_out(q.get("stand")))
             if path == "/api/gas":
@@ -672,6 +809,8 @@ def make_handler(app):
                 "/api/exchange/check": app.exchange_check,
                 "/api/exchange/take": app.exchange_take,
                 "/api/exchange/put": app.exchange_put,
+                "/api/routes/run": lambda b: app.route(b.get("stand")),
+                "/api/routes/resend": app.route_resend,
             }
             if path not in routes:
                 return self._send(404, {"error": "нет такого адреса"})
