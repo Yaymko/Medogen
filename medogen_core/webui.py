@@ -391,7 +391,8 @@ class App:
         path = self.stand_path(body.get("stand"))
         data = load_json(path) if os.path.isfile(path) else {"stand": "", "self": None, "orgs": {}}
         ex = body.get("exchange") or {}
-        data["exchange"] = {k: (ex.get(k) or "").strip() for k in ("out", "archive", "in")}
+        data["exchange"] = {k: (ex.get(k) or "").strip() for k in ("out", "archive", "in", "route_to")}
+        data["exchange"]["route_auto"] = bool(ex.get("route_auto"))
         self._write_json(path, data)
         return self.orgs(os.path.basename(path))
 

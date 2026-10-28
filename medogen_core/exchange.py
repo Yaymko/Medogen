@@ -17,7 +17,8 @@ def paths(stand):
     archive = (ex.get("archive") or "").strip()
     if not archive and out:
         archive = sibling_archive(out)
-    return {"out": out, "archive": archive, "in": inn}
+    return {"out": out, "archive": archive, "in": inn,
+            "route_to": (ex.get("route_to") or "").strip(), "route_auto": bool(ex.get("route_auto"))}
 
 
 def sibling_archive(out, pathmod=os.path):
