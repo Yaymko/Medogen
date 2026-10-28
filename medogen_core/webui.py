@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import threading
+import time
 import traceback
 import urllib.parse
 import uuid
@@ -56,6 +57,7 @@ class App:
         self.journal = os.path.join(self.work, "_routing", "journal.jsonl")
         self.route_settle = router.SETTLE
         self.route_state = {}  # стенд-отправитель → состояние маршрута с запуска
+        self.route_seen = {}  # стенд-отправитель → снимки пакетов OUT между проходами (router.route_once)
 
     # --- пути -------------------------------------------------------------------
 
@@ -503,6 +505,12 @@ class App:
 
     def _route_config(self, stand_file):
         """(пути отправителя, папка IN получателя, ошибка конфигурации) для маршрута стенда."""
+        try:
+            return self._route_config_raw(stand_file)
+        except Exception as e:  # битый файл стенда — ошибка конфигурации, а не сбой
+            return {}, None, f"файл стенда не читается: {type(e).__name__}: {e}"
+
+    def _route_config_raw(self, stand_file):
         p = exchange.paths(load_json(self.stand_path(stand_file))) or {}
         to = p.get("route_to") or ""
         if not to:
@@ -550,8 +558,23 @@ class App:
         with open(self.journal, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-    def route(self, stand):
+    def route(self, stand, wait=True):
+        """Проход маршрута. wait (кнопка «Переслать сейчас»): новые пакеты не ждут следующего
+        фонового прохода — снимок, пауза route_settle и второй проход; отметки BLOCKED снимаются."""
         stand_file = os.path.basename(self.stand_path(stand))
+        seen = self.route_seen.setdefault(stand_file, {})
+        if wait:
+            for k in [k for k, v in seen.items() if v == router.BLOCKED]:
+                del seen[k]
+        res = self._route_pass(stand_file, seen)
+        if wait and self.route_settle > 0:
+            done = {r["name"] for r in res["results"]}
+            if any(v != router.BLOCKED and k not in done for k, v in seen.items()):  # есть ожидающие пакеты
+                time.sleep(self.route_settle)
+                res["results"] += self._route_pass(stand_file, seen)["results"]
+        return res
+
+    def _route_pass(self, stand_file, seen):
         p, dst_in, err = self._route_config(stand_file)
         if err:
             raise MedoError(err)
@@ -560,7 +583,7 @@ class App:
         with EXCHANGE_LOCK:
             state["last_run"] = dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
             try:
-                results = router.route_once(p, dst_in, self.incoming, self.route_settle)
+                results = router.route_once(p, dst_in, self.incoming, self.route_settle, seen)
             except MedoError as e:
                 state["last_error"] = str(e)
                 raise
@@ -588,7 +611,7 @@ class App:
             except Exception:  # битый файл стенда не мешает остальным
                 continue
             try:
-                self.route(f)
+                self.route(f, wait=False)
             except Exception as e:  # сбой одного маршрута не останавливает остальные
                 self._state(f)["last_error"] = str(e) or type(e).__name__
 

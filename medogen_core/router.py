@@ -24,17 +24,49 @@ def last_change(folder):
     return latest
 
 
-def route_once(src, dst_in, incoming_dir, settle=SETTLE):
-    """Один проход: всё устоявшееся из src["out"] — во входящие, правильное — в dst_in.
+BLOCKED = "blocked"  # отметка в seen: пакет не перенесён из OUT, повторно не берём
 
+
+def snapshot(folder):
+    """Состав, размеры и времена файлов пакета: если между проходами не изменились, пакет дописан."""
+    sig = []
+    for cur, _dirs, files in os.walk(folder):
+        for n in files:
+            st = os.stat(os.path.join(cur, n))
+            sig.append((os.path.relpath(os.path.join(cur, n), folder), st.st_size, st.st_mtime))
+    return sorted(sig)
+
+
+def _ready(folder, name, settle, seen):
+    """Дописан ли пакет. С seen — сравнение со снимком прошлого прохода (не зависит от часов
+    сервера СЭД); без seen — пакет не менялся settle секунд по местным часам."""
+    if settle <= 0:
+        return True
+    if seen is None:
+        return time.time() - last_change(folder) >= settle
+    sig = snapshot(folder)
+    ready = seen.get(name) == sig
+    seen[name] = sig
+    return ready
+
+
+def route_once(src, dst_in, incoming_dir, settle=SETTLE, seen=None):
+    """Один проход: всё дописанное из src["out"] — во входящие, правильное — в dst_in.
+
+    seen — словарь между проходами (снимки пакетов и отметки BLOCKED); меняется на месте.
     Возвращает записи по пакетам, от старых к новым. Нет доступа к OUT — MedoError."""
     items = exchange.list_out(src["out"])
     items.sort(key=lambda i: i["mtime"])
+    if seen is not None:
+        for gone in set(seen) - {i["name"] for i in items}:
+            del seen[gone]  # пакет ушёл из OUT, отметки больше не нужны
     results = []
     for item in items:
         name = item["name"]
+        if seen is not None and seen.get(name) == BLOCKED:
+            continue
         try:
-            if time.time() - last_change(os.path.join(src["out"], name)) < settle:
+            if not _ready(os.path.join(src["out"], name), name, settle, seen):
                 continue  # пакет ещё дописывается
         except OSError:
             continue
@@ -48,8 +80,13 @@ def route_once(src, dst_in, incoming_dir, settle=SETTLE):
         except MedoError as e:
             rec["status"], rec["errors"] = "take_failed", [str(e)]
             continue
-        if err:
-            rec["warnings"].append(err)
+        if err:  # оригинал остался в OUT: переслать сейчас — значит слать его на каждом проходе
+            rec["status"] = "take_failed"
+            rec["errors"] = [err + ". Пакет не переслан, чтобы не отправить его повторно; исправьте доступ "
+                             "и нажмите «Переслать сейчас» или уберите пакет из OUT"]
+            if seen is not None:
+                seen[name] = BLOCKED
+            continue
         try:
             rec["errors"] = validate.validate_folder(rec["copy"], rec["warnings"])
         except Exception as e:  # проверка не должна ронять проход

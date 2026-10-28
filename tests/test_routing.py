@@ -174,10 +174,56 @@ class RouterModule(unittest.TestCase):
         with self.assertRaisesRegex(MedoError, "уже есть пакет"):
             router.resend(copy, self.inn, name)
 
+    def test_archive_failure_not_sent_and_not_repeated(self):
+        from medogen_core import router
+        name = put(self.p30, self.out)
+        with open(self.arch, "w") as f:  # OUTArchiveGen не создать: перенос из OUT не удастся
+            f.write("x")
+        seen = {}
+        router.route_once(self.src, self.inn, self.inc, settle=5, seen=seen)  # первый взгляд на пакет
+        res = router.route_once(self.src, self.inn, self.inc, settle=5, seen=seen)
+        self.assertEqual(res[0]["status"], "take_failed", res)
+        self.assertIn("не перенесён", res[0]["errors"][0])
+        self.assertEqual(os.listdir(self.inn), [])
+        self.assertEqual(os.listdir(self.out), [name])
+        self.assertEqual(router.route_once(self.src, self.inn, self.inc, settle=5, seen=seen), [])
+        self.assertEqual(len(os.listdir(self.inc)), 1)
+
+    def test_snapshot_settle_ignores_clock(self):
+        """С seen пакет берётся, только когда он не изменился с прошлого прохода (часы сервера не важны)."""
+        from medogen_core import router
+        name = put(self.p30, self.out, ago=3600)
+        seen = {}
+        self.assertEqual(router.route_once(self.src, self.inn, self.inc, settle=5, seen=seen), [])
+        env = os.path.join(self.out, name, "envelope.ini")
+        with open(env, "ab") as f:
+            f.write(b"\r\n")  # СЭД ещё пишет пакет
+        age(os.path.join(self.out, name), 3600)
+        self.assertEqual(router.route_once(self.src, self.inn, self.inc, settle=5, seen=seen), [])
+        res = router.route_once(self.src, self.inn, self.inc, settle=5, seen=seen)
+        self.assertEqual([r["status"] for r in res], ["sent"])
+
     def test_out_unreachable(self):
         self.src["out"] = os.path.join(self.box.name, "no-such", "OUT")
         with self.assertRaisesRegex(MedoError, "нет доступа"):
             self.run_once()
+
+
+class TakeCleanup(unittest.TestCase):
+    def test_take_removes_partial_copy(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as b:
+            out, dest = os.path.join(b, "OUT"), os.path.join(b, "dest")
+            os.makedirs(os.path.join(out, "p"))
+            open(os.path.join(out, "p", "envelope.ini"), "w").close()
+
+            def partial(src, dst, *a, **k):
+                os.makedirs(dst)
+                raise OSError("файл занят")
+            with mock.patch("shutil.copytree", partial):
+                with self.assertRaisesRegex(MedoError, "не удалось скопировать"):
+                    exchange.take(out, os.path.join(b, "arch"), "p", dest)
+            self.assertFalse(os.path.exists(dest))
 
 
 class AppRouting(unittest.TestCase):
@@ -284,6 +330,26 @@ class AppRouting(unittest.TestCase):
             "format": "3.0", "type": "document", "from": "pravit_mo", "to": ["mo_duma"]}})["packages"][0]
         with self.assertRaises(MedoError):
             self.app.route_resend({"id": built["id"]})
+
+    def test_broken_target_stand_file(self):
+        with open(os.path.join(self.root, "orgs", "s2.json"), "w") as f:
+            f.write("{broken")
+        r = next(r for r in self.app.routes()["routes"] if r["from"] == "s1.json")
+        self.assertIn("не читается", r["error"])
+        self.app.route_all_auto()  # не падает
+
+    def test_manual_run_waits_for_settle(self):
+        self.app.route_settle = 0.2
+        name = put(self.doc, self.dirs["s1"]["out"])
+        self.assertEqual(self.app.route("s1.json", wait=False)["results"], [])  # фон: первый взгляд
+        res = self.app.route("s1.json")["results"]  # кнопка: ждёт и пересылает
+        self.assertEqual([r["status"] for r in res], ["sent"])
+        self.assertEqual(os.listdir(self.dirs["s2"]["in"]), [name])
+
+    def test_manual_run_sends_new_package_at_once(self):
+        self.app.route_settle = 0.2
+        put(self.doc, self.dirs["s1"]["out"])
+        self.assertEqual([r["status"] for r in self.app.route("s1.json")["results"]], ["sent"])
 
     def test_parallel_runs_send_once(self):
         put(self.doc, self.dirs["s1"]["out"])

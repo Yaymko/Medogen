@@ -86,6 +86,7 @@ def take(out_dir, archive_dir, name, dest_dir):
     try:
         shutil.copytree(src, dest_dir)
     except OSError as e:
+        shutil.rmtree(dest_dir, ignore_errors=True)  # недописанная копия не должна выглядеть пакетом
         raise MedoError(f"не удалось скопировать пакет {name}: {e}")
     try:
         if not os.path.isdir(archive_dir):
