@@ -92,5 +92,93 @@ class RouteSettings(unittest.TestCase):
         self.assertEqual(self.app.orgs("default.json")["exchange"]["route_to"], "s2.json")
 
 
+class RouterModule(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.p30, cls.p271 = build(cls.tmp.name, [
+            {"name": "d30", "format": "3.0", "type": "document", "from": "pravit_mo", "to": ["mo_duma"]},
+            {"name": "d271", "format": "2.7.1", "type": "document", "from": "pravit_mo", "to": ["mo_duma"]}])
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.box = tempfile.TemporaryDirectory()
+        b = self.box.name
+        self.out, self.arch, self.inn, self.inc = (os.path.join(b, n) for n in ("OUT", "OUTArchiveGen", "IN", "inc"))
+        for d in (self.out, self.inn, self.inc):
+            os.makedirs(d)
+        self.src = {"out": self.out, "archive": self.arch}
+
+    def tearDown(self):
+        self.box.cleanup()
+
+    def run_once(self, settle=5):
+        from medogen_core import router
+        return router.route_once(self.src, self.inn, self.inc, settle=settle)
+
+    def test_valid_package_goes_to_in(self):
+        name = put(self.p30, self.out)
+        res = self.run_once()
+        self.assertEqual([r["status"] for r in res], ["sent"], res)
+        self.assertEqual(os.listdir(self.inn), [name])
+        self.assertEqual(os.listdir(self.out), [])
+        self.assertTrue(os.path.isdir(res[0]["archived"]))
+        self.assertTrue(os.path.isdir(res[0]["copy"]))
+        self.assertEqual(res[0]["in_path"], os.path.join(self.inn, name))
+        self.assertEqual(res[0]["format"], "3.0")
+        self.assertTrue(res[0]["msg_uid"])
+
+    def test_invalid_package_stays(self):
+        name = put(self.p30, self.out)
+        break_package(os.path.join(self.out, name))
+        age(os.path.join(self.out, name), 60)
+        res = self.run_once()
+        self.assertEqual(res[0]["status"], "invalid")
+        self.assertTrue(res[0]["errors"])
+        self.assertEqual(os.listdir(self.inn), [])
+        self.assertTrue(os.path.isdir(res[0]["copy"]))
+        self.assertIsNone(res[0]["in_path"])
+
+    def test_fresh_package_skipped(self):
+        name = put(self.p30, self.out, ago=0)
+        folder = os.path.join(self.out, name)
+        t = time.time() - 60
+        os.utime(os.path.join(folder, "envelope.ini"), (t, t))
+        os.utime(folder, (t, t))
+        self.assertEqual(self.run_once(), [])
+        self.assertEqual(os.listdir(self.out), [name])
+
+    def test_name_taken_in_in(self):
+        n1 = put(self.p30, self.out, ago=120)
+        n2 = put(self.p271, self.out, ago=60)
+        os.makedirs(os.path.join(self.inn, n1))
+        res = self.run_once()
+        self.assertEqual([(r["name"], r["status"]) for r in res], [(n1, "put_failed"), (n2, "sent")])
+        self.assertIn("уже есть пакет", res[0]["errors"][0])
+
+    def test_order_oldest_first(self):
+        n_new = put(self.p30, self.out, ago=60)
+        n_old = put(self.p271, self.out, ago=120)
+        self.assertEqual([r["name"] for r in self.run_once()], [n_old, n_new])
+
+    def test_resend_invalid(self):
+        from medogen_core import router
+        name = put(self.p30, self.out)
+        break_package(os.path.join(self.out, name))
+        age(os.path.join(self.out, name), 60)
+        copy = self.run_once()[0]["copy"]
+        self.assertEqual(router.resend(copy, self.inn, name), os.path.join(self.inn, name))
+        with self.assertRaisesRegex(MedoError, "уже есть пакет"):
+            router.resend(copy, self.inn, name)
+
+    def test_out_unreachable(self):
+        self.src["out"] = os.path.join(self.box.name, "no-such", "OUT")
+        with self.assertRaisesRegex(MedoError, "нет доступа"):
+            self.run_once()
+
+
 if __name__ == "__main__":
     unittest.main()

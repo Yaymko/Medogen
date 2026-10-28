@@ -392,6 +392,13 @@ def make_zip(files):
     return buf.getvalue()
 
 
+def dir_stamp():
+    """Префикс папок: время и случайный хвост, чтобы сборки в одну секунду не затирали друг друга."""
+    import datetime as dt
+    import uuid
+    return f"{dt.datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:3]}"
+
+
 def safe_dir_name(text):
     s = re.sub(r"[^\w\-.]+", "_", str(text), flags=re.UNICODE).strip("_")
     return s[:80] or "package"

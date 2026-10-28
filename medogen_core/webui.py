@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import builder, digital, exchange, gas, importer, v27, v271, validate
 from .common import (CLASSES, KINDS, PLACES, RECEIPT_REASONS, REFUSAL_REASONS, WARNINGS,
-                     Directory, MedoError, load_json, safe_dir_name)
+                     Directory, MedoError, dir_stamp, load_json, safe_dir_name)
 from .reply import read_package
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
@@ -564,9 +564,7 @@ def _link(cards):
             ref["children"].append(c["id"])
 
 
-def _stamp():
-    """Префикс папок: время и случайный хвост, чтобы сборки в одну секунду не затирали друг друга."""
-    return f"{dt.datetime.now():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:3]}"
+_stamp = dir_stamp
 
 
 # --- HTTP -----------------------------------------------------------------------------------

@@ -110,9 +110,9 @@ def _copy_package(src, dst):
             shutil.copy2(s, os.path.join(dst, n))
 
 
-def put_in(package_dir, in_dir):
-    """Кладёт папку пакета в IN под тем же именем: сначала во временную папку, затем переименование."""
-    name = os.path.basename(os.path.normpath(package_dir))
+def put_in(package_dir, in_dir, name=None):
+    """Кладёт папку пакета в IN под тем же (или заданным) именем: сначала во временную папку, затем переименование."""
+    name = name or os.path.basename(os.path.normpath(package_dir))
     target = os.path.join(in_dir, name)
     if os.path.exists(target):
         raise MedoError(f"в IN уже есть пакет {name}")
