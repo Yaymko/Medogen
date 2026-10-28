@@ -1,5 +1,6 @@
 """Формат 2.7.1: паспорт ТК (urn:IEDMS:CONTAINER) и паспорт ЭС (urn:IEDMS:MESSAGE)."""
-from .common import make_zip, read_file, stub_png, warn
+from . import stamps
+from .common import make_zip, read_file, warn
 from .xmlb import E, document
 
 NS_C = "urn:IEDMS:CONTAINER"
@@ -62,7 +63,7 @@ def build_container(ctx, doc, extra=(), dialect=None):
             warn(f"тип подписи «{stype}» нет в схеме {dl.version}, указан «Утверждающая»")
             stype = "Утверждающая"
         sig = read_file(s.file, ctx.base_dir) if s.file else ctx.crypto.sign(doc.pdf, dl.doc_name)
-        st = read_file(s.stamp_file, ctx.base_dir) if s.stamp_file else stub_png(300, 130)
+        st = read_file(s.stamp_file, ctx.base_dir) if s.stamp_file else stamps.for_signer(sig, s)
         files += [(sig_name, sig), (stamp_name, st)]
         signs.append(E("xdms:sign", None, None,
                        E("xdms:person", None, {"xdms:id": s.id},
@@ -71,7 +72,7 @@ def build_container(ctx, doc, extra=(), dialect=None):
                          E("xdms:email", s.email) if s.email else None),
                        E("xdms:documentSignature", None, {"xdms:localName": sig_name, "xdms:type": stype},
                          _stamp("xdms:signatureStamp", stamp_name, s.stamp))))
-    reg_png = read_file(doc.reg_stamp_file, ctx.base_dir) if doc.reg_stamp_file else stub_png(300, 80)
+    reg_png = read_file(doc.reg_stamp_file, ctx.base_dir) if doc.reg_stamp_file else stamps.for_document(doc)
     files.append((dl.reg_stamp, reg_png))
 
     ex = doc.executor
