@@ -558,23 +558,27 @@ class App:
         with open(self.journal, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-    def route(self, stand, wait=True):
+    def route(self, stand, wait=True, names=None):
         """Проход маршрута. wait (кнопка «Переслать сейчас»): новые пакеты не ждут следующего
-        фонового прохода — снимок, пауза route_settle и второй проход; отметки BLOCKED снимаются."""
+        фонового прохода — снимок, пауза route_settle и второй проход; отметки BLOCKED снимаются.
+        names — переслать только эти пакеты из OUT (выбор в блоке «Папка OUT»)."""
         stand_file = os.path.basename(self.stand_path(stand))
+        if names is not None and (not isinstance(names, list) or not all(isinstance(n, str) for n in names)):
+            raise MedoError("names — список имён пакетов")
         seen = self.route_seen.setdefault(stand_file, {})
         if wait:
             for k in [k for k, v in seen.items() if v == router.BLOCKED]:
                 del seen[k]
-        res = self._route_pass(stand_file, seen)
+        res = self._route_pass(stand_file, seen, names)
         if wait and self.route_settle > 0:
             done = {r["name"] for r in res["results"]}
-            if any(v != router.BLOCKED and k not in done for k, v in seen.items()):  # есть ожидающие пакеты
+            if any(v != router.BLOCKED and k not in done and (names is None or k in names)
+                   for k, v in seen.items()):  # есть ожидающие пакеты
                 time.sleep(self.route_settle)
-                res["results"] += self._route_pass(stand_file, seen)["results"]
+                res["results"] += self._route_pass(stand_file, seen, names)["results"]
         return res
 
-    def _route_pass(self, stand_file, seen):
+    def _route_pass(self, stand_file, seen, names=None):
         p, dst_in, err = self._route_config(stand_file)
         if err:
             raise MedoError(err)
@@ -583,7 +587,7 @@ class App:
         with EXCHANGE_LOCK:
             state["last_run"] = dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
             try:
-                results = router.route_once(p, dst_in, self.incoming, self.route_settle, seen)
+                results = router.route_once(p, dst_in, self.incoming, self.route_settle, seen, names)
             except MedoError as e:
                 state["last_error"] = str(e)
                 raise
@@ -832,7 +836,7 @@ def make_handler(app):
                 "/api/exchange/check": app.exchange_check,
                 "/api/exchange/take": app.exchange_take,
                 "/api/exchange/put": app.exchange_put,
-                "/api/routes/run": lambda b: app.route(b.get("stand")),
+                "/api/routes/run": lambda b: app.route(b.get("stand"), names=b.get("names")),
                 "/api/routes/resend": app.route_resend,
             }
             if path not in routes:

@@ -50,10 +50,11 @@ def _ready(folder, name, settle, seen):
     return ready
 
 
-def route_once(src, dst_in, incoming_dir, settle=SETTLE, seen=None):
+def route_once(src, dst_in, incoming_dir, settle=SETTLE, seen=None, names=None):
     """Один проход: всё дописанное из src["out"] — во входящие, правильное — в dst_in.
 
     seen — словарь между проходами (снимки пакетов и отметки BLOCKED); меняется на месте.
+    names — только эти пакеты (выбор тестировщика); пакета нет в OUT — запись take_failed.
     Возвращает записи по пакетам, от старых к новым. Нет доступа к OUT — MedoError."""
     items = exchange.list_out(src["out"])
     items.sort(key=lambda i: i["mtime"])
@@ -61,6 +62,15 @@ def route_once(src, dst_in, incoming_dir, settle=SETTLE, seen=None):
         for gone in set(seen) - {i["name"] for i in items}:
             del seen[gone]  # пакет ушёл из OUT, отметки больше не нужны
     results = []
+    if names is not None:
+        present = {i["name"] for i in items}
+        for name in names:
+            if name not in present:
+                results.append({"at": dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "name": name,
+                                "format": None, "msg_uid": None, "copy": None, "archived": None,
+                                "status": "take_failed", "in_path": None,
+                                "errors": [f"пакет уже забран или не найден: {name}"], "warnings": []})
+        items = [i for i in items if i["name"] in set(names)]
     for item in items:
         name = item["name"]
         if seen is not None and seen.get(name) == BLOCKED:

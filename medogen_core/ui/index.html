@@ -987,6 +987,7 @@ async function sendRepliesIn(list) {
 
 // ---------- вкладка «Пакеты» ----------
 let PKG_SEL = null, PKG_DETAIL = null, OUT_DATA = null, OUT_BUSY = false;
+const OUT_SEL = new Set();  // пакеты OUT, выбранные для пересылки по маршруту
 async function loadOut() {
   if (!ORGS.exchange?.out) { OUT_DATA = null; return; }
   OUT_BUSY = true;
@@ -1008,8 +1009,25 @@ function outCard() {
   if (!OUT_DATA) { card.append(h("div", { class: "empty" }, "Чтение папки…")); return card; }
   if (OUT_DATA.error) { card.append(h("div", { class: "msg err small" }, OUT_DATA.error)); return card; }
   if (!OUT_DATA.items.length) { card.append(h("div", { class: "empty" }, "В OUT нет пакетов")); return card; }
-  card.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Изменён"), h("th", {}, "Формат"), h("th", {}, "От → кому"), h("th", {}, "Документ"), h("th", {}))),
+  // выбор пакетов для пересылки по маршруту стенда (при снятой галочке «Автоматически»)
+  const ex = ORGS.exchange, pick = !!ex.route_to && !ex.route_auto;
+  const names = OUT_DATA.items.map(x => x.name);
+  [...OUT_SEL].forEach(n => { if (!names.includes(n)) OUT_SEL.delete(n); });
+  if (ex.route_to && ex.route_auto) card.append(h("div", { class: "hint", style: "margin:0 0 8px" },
+    `Пакеты из этой папки сам пересылает маршрутизатор в стенд ${ex.route_to}. Чтобы выбирать пакеты вручную, снимите галочку «Автоматически» на вкладке «Организации».`));
+  if (pick) {
+    const target = META.stands.find(s => s.file === ex.route_to);
+    card.append(h("div", { class: "actions", style: "margin:0 0 8px" },
+      h("button", { class: "btn small primary", type: "button", disabled: !OUT_SEL.size, onclick: () => routeSelected() },
+        `Переслать выбранные в стенд «${target?.stand || ex.route_to}» (${OUT_SEL.size})`),
+      h("span", { class: "small muted" }, "проверка, затем IN второго стенда; оригинал — в OUTArchiveGen")));
+  }
+  const all = pick ? h("input", { type: "checkbox", title: "Выбрать все", checked: OUT_SEL.size === names.length,
+    onchange: e => { OUT_SEL.clear(); if (e.target.checked) names.forEach(n => OUT_SEL.add(n)); renderPackages(); } }) : null;
+  card.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, pick ? h("th", {}, all) : null, h("th", {}, "Изменён"), h("th", {}, "Формат"), h("th", {}, "От → кому"), h("th", {}, "Документ"), h("th", {}))),
     h("tbody", {}, ...OUT_DATA.items.map(x => h("tr", {},
+      pick ? h("td", {}, h("input", { type: "checkbox", checked: OUT_SEL.has(x.name),
+        onchange: e => { e.target.checked ? OUT_SEL.add(x.name) : OUT_SEL.delete(x.name); renderPackages(); } })) : null,
       h("td", { class: "small" }, new Date(x.mtime * 1000).toLocaleString("ru-RU"), h("div", { class: "small muted mono" }, x.name)),
       h("td", {}, x.format || "?"),
       h("td", { class: "small" }, x.error ? h("span", { style: "color:var(--err)" }, "не читается: " + x.error) : (x.from?.name || "—") + " → " + ((x.to || []).map(o => o.name).join(", ") || "—")),
@@ -1085,6 +1103,20 @@ setInterval(async () => {
   redrawRoutes();
   if (ROUTE_JOURNAL[0]?.at + ROUTE_JOURNAL.length !== before) { await loadPackages(); const l = document.getElementById("pkg-list"); if (l && !l.contains(document.activeElement)) renderPackages(); }
 }, 10000);
+async function routeSelected() {
+  const names = [...OUT_SEL];
+  toast(`Пересылка пакетов: ${names.length}…`);
+  try {
+    const r = await api("/api/routes/run", { stand: currentStand(), names });
+    const n = s => r.results.filter(x => x.status === s).length;
+    const bad = r.results.filter(x => !["sent", "invalid"].includes(x.status));
+    toast(`Переслано: ${n("sent")}, с ошибками проверки: ${n("invalid")}` + (bad.length ? `, сбоев: ${bad.length}. ${bad[0].errors?.[0] || ""}` : ""));
+    OUT_SEL.clear();
+    await loadPackages();
+  } catch (e) { toast("Ошибка: " + e.message); }
+  await Promise.all([loadOut(), loadRoutes()]);
+  if (TAB === "packages") renderPackages();
+}
 async function takeOut(name) {
   try {
     const r = await api("/api/exchange/take", { stand: currentStand(), name });

@@ -203,6 +203,20 @@ class RouterModule(unittest.TestCase):
         res = router.route_once(self.src, self.inn, self.inc, settle=5, seen=seen)
         self.assertEqual([r["status"] for r in res], ["sent"])
 
+    def test_names_only_selected(self):
+        from medogen_core import router
+        n1 = put(self.p30, self.out, ago=120)
+        n2 = put(self.p271, self.out, ago=60)
+        res = router.route_once(self.src, self.inn, self.inc, settle=5, names=[n2])
+        self.assertEqual([(r["name"], r["status"]) for r in res], [(n2, "sent")])
+        self.assertEqual(os.listdir(self.out), [n1])
+
+    def test_names_missing_package(self):
+        from medogen_core import router
+        res = router.route_once(self.src, self.inn, self.inc, settle=5, names=["nope"])
+        self.assertEqual([(r["name"], r["status"]) for r in res], [("nope", "take_failed")])
+        self.assertIn("не найден", res[0]["errors"][0])
+
     def test_out_unreachable(self):
         self.src["out"] = os.path.join(self.box.name, "no-such", "OUT")
         with self.assertRaisesRegex(MedoError, "нет доступа"):
@@ -350,6 +364,16 @@ class AppRouting(unittest.TestCase):
         self.app.route_settle = 0.2
         put(self.doc, self.dirs["s1"]["out"])
         self.assertEqual([r["status"] for r in self.app.route("s1.json")["results"]], ["sent"])
+
+    def test_route_selected_packages(self):
+        self.save("s1", route_to="s2.json", route_auto=False)
+        n1 = put(self.doc, self.dirs["s1"]["out"])
+        n2 = put(self.replies[0], self.dirs["s1"]["out"])
+        res = self.app.route("s1.json", names=[n2])["results"]
+        self.assertEqual([(r["name"], r["status"]) for r in res], [(n2, "sent")])
+        self.assertEqual(os.listdir(self.dirs["s2"]["in"]), [n2])
+        self.assertEqual(os.listdir(self.dirs["s1"]["out"]), [n1])
+        self.assertEqual(self.app.route_journal()["items"][0]["name"], n2)
 
     def test_parallel_runs_send_once(self):
         put(self.doc, self.dirs["s1"]["out"])
