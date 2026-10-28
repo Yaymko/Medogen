@@ -119,7 +119,7 @@ def cmd_orgs(args):
 
 def cmd_ui(args):
     from medogen_core import webui
-    webui.serve(HERE, args.host, args.port, not args.no_browser)
+    webui.serve(HERE, args.host, args.port, not args.no_browser, args.route_interval)
     return 0
 
 
@@ -164,6 +164,8 @@ def main():
                    help="адрес (0.0.0.0 — открыть доступ коллегам по сети)")
     u.add_argument("--port", type=int, default=8765)
     u.add_argument("--no-browser", action="store_true", help="не открывать браузер")
+    u.add_argument("--route-interval", type=float, default=10,
+                   help="опрос маршрутов между стендами, секунд (0 — не опрашивать)")
     u.set_defaults(func=cmd_ui)
 
     args = ap.parse_args()

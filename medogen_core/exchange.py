@@ -17,7 +17,8 @@ def paths(stand):
     archive = (ex.get("archive") or "").strip()
     if not archive and out:
         archive = sibling_archive(out)
-    return {"out": out, "archive": archive, "in": inn}
+    return {"out": out, "archive": archive, "in": inn,
+            "route_to": (ex.get("route_to") or "").strip(), "route_auto": bool(ex.get("route_auto"))}
 
 
 def sibling_archive(out, pathmod=os.path):
@@ -85,6 +86,7 @@ def take(out_dir, archive_dir, name, dest_dir):
     try:
         shutil.copytree(src, dest_dir)
     except OSError as e:
+        shutil.rmtree(dest_dir, ignore_errors=True)  # недописанная копия не должна выглядеть пакетом
         raise MedoError(f"не удалось скопировать пакет {name}: {e}")
     try:
         if not os.path.isdir(archive_dir):
@@ -109,9 +111,9 @@ def _copy_package(src, dst):
             shutil.copy2(s, os.path.join(dst, n))
 
 
-def put_in(package_dir, in_dir):
-    """Кладёт папку пакета в IN под тем же именем: сначала во временную папку, затем переименование."""
-    name = os.path.basename(os.path.normpath(package_dir))
+def put_in(package_dir, in_dir, name=None):
+    """Кладёт папку пакета в IN под тем же (или заданным) именем: сначала во временную папку, затем переименование."""
+    name = name or os.path.basename(os.path.normpath(package_dir))
     target = os.path.join(in_dir, name)
     if os.path.exists(target):
         raise MedoError(f"в IN уже есть пакет {name}")
