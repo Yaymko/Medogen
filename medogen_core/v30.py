@@ -1,5 +1,6 @@
 """Формат 3.0: паспорт ТК (urn:IEDMS:CONTAINER:3.0) и паспорт ЭС (urn:IEDMS:MESSAGE:3.0)."""
-from .common import CONTAINER_TYPES, make_zip, read_file, stub_png
+from . import stamps
+from .common import CONTAINER_TYPES, make_zip, read_file
 from .xmlb import E, document
 
 NS_C = "urn:IEDMS:CONTAINER:3.0"
@@ -48,13 +49,13 @@ def build_dev_container(ctx, doc, digital=None, extra=()):
     if digital is not None:
         files.append(("digital.xml", digital))
     stamps_files = []
-    reg_png = read_file(doc.reg_stamp_file, ctx.base_dir) if doc.reg_stamp_file else stub_png(300, 80)
+    reg_png = read_file(doc.reg_stamp_file, ctx.base_dir) if doc.reg_stamp_file else stamps.for_document(doc)
     stamps_files.append(("reg_stamp.png", reg_png))
     signs = []
     for i, s in enumerate(doc.signers):
         sig_name, stamp_name = f"document_sign_{i}.p7s", f"sign_stamp_{i}.png"
         sig = read_file(s.file, ctx.base_dir) if s.file else ctx.crypto.sign(doc.pdf, "document.pdf")
-        st = read_file(s.stamp_file, ctx.base_dir) if s.stamp_file else stub_png(300, 130)
+        st = read_file(s.stamp_file, ctx.base_dir) if s.stamp_file else stamps.for_signer(sig, s)
         files.append((sig_name, sig))
         stamps_files.append((stamp_name, st))
         signs.append(E("xdms:sign", None, {"xdms:signFile": sig_name},
