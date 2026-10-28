@@ -1017,6 +1017,74 @@ function outCard() {
       h("td", {}, h("button", { class: "btn small primary", type: "button", title: "Скопировать в medogen и перенести в OUTArchiveGen", onclick: () => takeOut(x.name) }, "Забрать"))))))));
   return card;
 }
+let ROUTES = null, ROUTE_JOURNAL = [], ROUTES_BUSY = false;
+async function loadRoutes() {
+  ROUTES_BUSY = true;
+  try { const [r, j] = await Promise.all([api("/api/routes"), api("/api/routes/journal")]); ROUTES = r.routes; ROUTE_JOURNAL = j.items; }
+  catch (e) { ROUTES = []; ROUTE_JOURNAL = []; toast("Маршрутизация: " + e.message); }
+  ROUTES_BUSY = false;
+}
+function redrawRoutes() { const el = document.getElementById("pkg-routes"); if (el) el.replaceWith(routeCard()); }
+const ROUTE_STATUS = {
+  sent: r => h("span", { class: "pill ok", title: r.in_path || "" }, "в IN"),
+  resent: r => h("span", { class: "pill ok", title: r.in_path || "" }, "переслан без проверки"),
+  invalid: r => h("span", { class: "pill err", title: (r.errors || []).join("\n") }, `ошибки проверки: ${(r.errors || []).length}`),
+  put_failed: r => h("span", { class: "pill err", title: (r.errors || []).join("\n") }, "ошибка записи: " + (r.errors || [""])[0]),
+  take_failed: r => h("span", { class: "pill err", title: (r.errors || []).join("\n") }, "не забран: " + (r.errors || [""])[0]),
+};
+function routeCard() {
+  if (!ROUTES && !ROUTES_BUSY) loadRoutes().then(redrawRoutes);
+  const folded = store.get("routesFolded", false);
+  const card = h("div", { class: "card", id: "pkg-routes" }, h("div", { class: "actions", style: "justify-content:space-between" },
+    h("h2", { class: "fold", style: "margin:0", title: folded ? "Развернуть" : "Свернуть",
+      onclick: () => { store.set("routesFolded", !folded); redrawRoutes(); } }, `${folded ? "▸" : "▾"} Маршрутизация между стендами${ROUTES ? ` (${ROUTES.length})` : ""}`),
+    h("button", { class: "btn small", type: "button", onclick: async () => { await loadRoutes(); redrawRoutes(); } }, "Обновить")));
+  if (folded) return card;
+  if (!ROUTES) { card.append(h("div", { class: "empty" }, "Загрузка…")); return card; }
+  if (!ROUTES.length) { card.append(h("div", { class: "hint" }, "Маршруты настраиваются на вкладке «Организации», блок «Обмен с СЭД»: поле «Пересылать в стенд».")); return card; }
+  const title = (f, t) => t ? `${t} (${f})` : f;
+  card.append(h("div", { style: "overflow:auto" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Маршрут"), h("th", {}, "Режим"), h("th", {}, "Последний проход"), h("th", {}, "Переслано / с ошибками / сбоев"), h("th", {}))),
+    h("tbody", {}, ...ROUTES.map(r => h("tr", {},
+      h("td", { class: "small" }, title(r.from, r.from_title), " → ", title(r.to, r.to_title)),
+      h("td", {}, r.auto ? h("span", { class: "pill ok" }, "авто") : "вручную"),
+      h("td", { class: "small" }, r.error ? h("span", { style: "color:var(--err)" }, r.error) : [r.state.last_run || "—",
+        r.state.last_error ? h("div", { style: "color:var(--err)" }, r.state.last_error) : null]),
+      h("td", { class: "small" }, `${r.state.sent} / ${r.state.invalid} / ${r.state.failed}`),
+      h("td", {}, h("button", { class: "btn small primary", type: "button", disabled: !!r.error, onclick: () => runRoute(r.from) }, "Переслать сейчас"))))))));
+  card.append(h("h3", { style: "margin:12px 0 4px" }, "Журнал"));
+  if (!ROUTE_JOURNAL.length) { card.append(h("div", { class: "empty" }, "Пересылок пока не было")); return card; }
+  card.append(h("div", { style: "overflow:auto;max-height:360px" }, h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Время"), h("th", {}, "Маршрут"), h("th", {}, "Пакет"), h("th", {}, "Формат"), h("th", {}, "Результат"), h("th", {}))),
+    h("tbody", {}, ...ROUTE_JOURNAL.map(j => h("tr", {},
+      h("td", { class: "small" }, j.at), h("td", { class: "small" }, `${j.from} → ${j.to}`),
+      h("td", { class: "small mono" }, j.id ? relLink(j.id, j.name) : j.name),
+      h("td", {}, j.format || ""),
+      h("td", { class: "small" }, (ROUTE_STATUS[j.status] || (() => j.status))(j), (j.warnings || []).length ? h("div", { class: "muted", title: j.warnings.join("\n") }, `предупреждений: ${j.warnings.length}`) : null),
+      h("td", {}, ["invalid", "put_failed"].includes(j.status) && j.id && !ROUTE_JOURNAL.some(x => x.id === j.id && x.status === "resent") ? h("button", { class: "btn small", type: "button", onclick: () => resendRoute(j.id) }, "Переслать без проверки") : null)))))));
+  return card;
+}
+async function runRoute(stand) {
+  try {
+    const r = await api("/api/routes/run", { stand });
+    const n = s => r.results.filter(x => x.status === s).length;
+    toast(r.results.length ? `Переслано: ${n("sent")}, с ошибками: ${n("invalid")}, сбоев: ${r.results.length - n("sent") - n("invalid")}` : "В OUT нет готовых пакетов");
+    if (r.results.length) await loadPackages();
+  } catch (e) { toast("Ошибка: " + e.message); }
+  await loadRoutes(); if (TAB === "packages") renderPackages();
+}
+async function resendRoute(id) {
+  if (!confirm("Положить пакет в IN без проверки?")) return;
+  try { const r = await api("/api/routes/resend", { id }); toast("Пакет положен в IN: " + r.path); }
+  catch (e) { toast("Ошибка: " + e.message); }
+  await loadRoutes(); redrawRoutes();
+}
+// Журнал маршрутизации обновляется сам, пока вкладка «Пакеты» открыта и блок развёрнут
+setInterval(async () => {
+  if (TAB !== "packages" || store.get("routesFolded", false) || !ROUTES?.length || document.hidden) return;
+  const before = ROUTE_JOURNAL[0]?.at + ROUTE_JOURNAL.length;
+  await loadRoutes();
+  redrawRoutes();
+  if (ROUTE_JOURNAL[0]?.at + ROUTE_JOURNAL.length !== before) { await loadPackages(); const l = document.getElementById("pkg-list"); if (l && !l.contains(document.activeElement)) renderPackages(); }
+}, 10000);
 async function takeOut(name) {
   try {
     const r = await api("/api/exchange/take", { stand: currentStand(), name });
@@ -1099,7 +1167,7 @@ function renderPackages() {
     if (!confirm("Удалить пакет с диска?")) return;
     try { await api("/api/delete", { id: PKG_DETAIL.id }); PKG_SEL = null; PKG_DETAIL = null; await loadPackages(); renderPackages(); } catch (e) { toast(e.message); } } }));
   else detail.append(h("div", { class: "empty" }, "Выберите пакет в списке. При открытии пакет проверяется заново."));
-  root.append(h("div", { class: "pkg-layout" }, pkgToc(), h("div", { class: "grid" }, h("div", {}, outCard(), list), detail)));
+  root.append(h("div", { class: "pkg-layout" }, pkgToc(), h("div", { class: "grid" }, h("div", {}, routeCard(), outCard(), list), detail)));
 }
 // Оглавление вкладки «Пакеты»: быстрый переход, когда в OUT много пакетов
 function pkgToc() {
@@ -1108,6 +1176,8 @@ function pkgToc() {
   return h("nav", { class: "card pkg-toc" }, h("div", { class: "small muted", style: "padding:0 6px 4px" }, "Перейти"),
     ORGS.exchange?.out ? h("a", { onclick: () => go("pkg-out", () => { if (store.get("outFolded", false)) { store.set("outFolded", false); renderPackages(); } }) },
       "Папка OUT", outN === null ? null : h("span", { class: "n" }, ` (${outN})`)) : null,
+    h("a", { onclick: () => go("pkg-routes", () => { if (store.get("routesFolded", false)) { store.set("routesFolded", false); redrawRoutes(); } }) }, "Маршрутизация",
+      ROUTES ? h("span", { class: "n" }, ` (${ROUTES.length})`) : null),
     h("a", { onclick: () => go("pkg-list") }, "Собранные и входящие", h("span", { class: "n" }, ` (${PACKAGES.length})`)),
     PKG_DETAIL ? h("a", { onclick: () => go("pkg-detail") }, "Открытый пакет") : null,
     ORGS.exchange?.out ? h("a", { class: "small", onclick: () => { store.set("outFolded", !store.get("outFolded", false)); renderPackages(); } },
@@ -1219,11 +1289,18 @@ function renderOrgs() {
   const xo = h("input", { value: ex.out || "", class: "mono", placeholder: "\\\\srv-sed\\MEDO\\OUT" }),
     xa = h("input", { value: ex.archive || "", class: "mono", placeholder: "пусто — OUTArchiveGen рядом с OUT" }),
     xi = h("input", { value: ex.in || "", class: "mono", placeholder: "\\\\srv-sed\\MEDO\\IN" });
+  const xr = h("select", {}, h("option", { value: "" }, "— не пересылать —"),
+    ...META.stands.filter(s => s.file !== ORGS.file).map(s => h("option", { value: s.file, selected: ex.route_to === s.file }, `${s.stand || s.file} (${s.file})`)));
+  const xauto = h("input", { type: "checkbox", checked: !!ex.route_auto });
   const xres = h("div", {});
-  const xsave = async () => { ORGS = await api("/api/exchange/save", { stand: currentStand(), exchange: { out: xo.value, archive: xa.value, in: xi.value } }); OUT_DATA = null; };
+  const xsave = async () => { ORGS = await api("/api/exchange/save", { stand: currentStand(), exchange: { out: xo.value, archive: xa.value, in: xi.value, route_to: xr.value, route_auto: xauto.checked } }); OUT_DATA = null; ROUTES = null; };
   side.append(h("div", { class: "card" }, h("h2", {}, "Обмен с СЭД (папки OUT и IN)"),
     h("div", { class: "hint", style: "margin:0 0 10px" }, "Общие папки сервера СЭД этого стенда. Из OUT пакеты забираются на вкладке «Пакеты» и переносятся в OUTArchiveGen, ответы кладутся в IN. Доступ нужен учётной записи, под которой запущен medogen."),
     field("OUT — исходящие СЭД", xo), field("OUTArchiveGen — забранные пакеты", xa), field("IN — входящие для СЭД", xi),
+    field("Пересылать в стенд (маршрутизация)", xr),
+    h("label", { class: "check", title: "Всё из OUT этого стенда будет забирать маршрутизатор: проверять и класть в IN выбранного стенда" }, xauto,
+      h("span", {}, "Автоматически (опрос OUT каждые 10 секунд)")),
+    h("div", { class: "hint", style: "margin:2px 0 0" }, "С галочкой всё из OUT этого стенда будет забирать маршрутизатор, ручное «Забрать» здесь не понадобится. Для ответов настройте обратный маршрут у второго стенда."),
     h("div", { class: "actions", style: "margin-top:8px" },
       h("button", { class: "btn primary", type: "button", onclick: async () => { try { await xsave(); toast("Сохранено"); } catch (err) { toast(err.message); } } }, "Сохранить"),
       h("button", { class: "btn", type: "button", onclick: async () => {
