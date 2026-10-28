@@ -840,12 +840,31 @@ def _as_text(name, data):
     return None
 
 
-def serve(root, host="127.0.0.1", port=8765, open_browser=True):
+def start_router(app, interval):
+    """Фоновый опрос маршрутов с галочкой «Автоматически». Возвращает Event: set() останавливает опрос."""
+    stop = threading.Event()
+
+    def loop():
+        while not stop.is_set():
+            try:
+                app.route_all_auto()
+            except Exception:  # опрос не должен останавливаться из-за одного сбоя
+                traceback.print_exc()
+            stop.wait(interval)
+
+    threading.Thread(target=loop, name="medogen-router", daemon=True).start()
+    return stop
+
+
+def serve(root, host="127.0.0.1", port=8765, open_browser=True, route_interval=10):
     app = App(root)
     httpd = ThreadingHTTPServer((host, port), make_handler(app))
     url = f"http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}/"
     print(f"Интерфейс medogen: {url}")
     print(f"Пакеты сохраняются в {app.work}")
+    if route_interval > 0:
+        start_router(app, route_interval)
+        print(f"Маршрутизация: опрос каждые {route_interval:g} с")
     print("Остановить: Ctrl+C")
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()

@@ -295,5 +295,37 @@ class AppRouting(unittest.TestCase):
         self.assertEqual(len(os.listdir(self.dirs["s2"]["in"])), 1)
 
 
+    def test_background_thread(self):
+        from medogen_core import webui
+        name = put(self.doc, self.dirs["s1"]["out"])
+        stop = webui.start_router(self.app, 0.05)
+        try:
+            deadline = time.time() + 5
+            while time.time() < deadline and not os.listdir(self.dirs["s2"]["in"]):
+                time.sleep(0.05)
+        finally:
+            stop.set()
+        self.assertEqual(os.listdir(self.dirs["s2"]["in"]), [name])
+
+    def test_background_thread_survives_exception(self):
+        from medogen_core import webui
+        calls = []
+
+        def boom():
+            calls.append(1)
+            raise RuntimeError("сбой")
+        self.app.route_all_auto = boom
+        with contextlib.redirect_stderr(io.StringIO()):
+            stop = webui.start_router(self.app, 0.02)
+            try:
+                deadline = time.time() + 5
+                while time.time() < deadline and len(calls) < 2:
+                    time.sleep(0.02)
+            finally:
+                stop.set()
+                time.sleep(0.05)
+        self.assertGreaterEqual(len(calls), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
