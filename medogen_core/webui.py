@@ -458,37 +458,24 @@ class App:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(info, f, ensure_ascii=False, indent=2)
 
-    def _mark_sent_in(self, folder, path):
-        """Отметка «положен в IN» в манифесте; ошибка записи отметки не отменяет саму отправку."""
-        try:
-            mpath = builder.manifest_path(folder)
-            old = os.path.join(folder, "manifest.json")  # пакеты старых версий
-            src = mpath if os.path.isfile(mpath) else old if os.path.isfile(old) else None
-            man = load_json(src) if src else {}
-            man.setdefault("sent_in", []).append({"at": dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "path": path})
-            with open(mpath, "w", encoding="utf-8") as f:
-                json.dump(man, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            return f"пакет положен в IN, но отметка не записана: {e}"
-        return None
-
     def exchange_put(self, body):
         p = self._exchange_paths(body.get("stand"))
-        if not p["in"]:
-            raise MedoError("для стенда не задана папка IN")
+        to = (body.get("to") or "in").lower()
+        folder_to = exchange.target_dir(p, to)
+        label = exchange.TARGETS[to]
         results = []
         for pid in body.get("ids") or []:
             item = {"id": pid, "ok": False}
             try:
                 folder = self.pkg_path(pid)
                 if self.pkg_id(folder).split("/")[0] in ("_incoming", "_uploads", "_scenarios", "_manifests"):
-                    raise MedoError("входящий пакет в IN не кладётся")
+                    raise MedoError(f"входящий пакет в {label} не кладётся")
                 if validate.validate_folder(folder, []):
-                    raise MedoError("в пакете ошибки проверки, в IN не положен")
+                    raise MedoError(f"в пакете ошибки проверки, в {label} не положен")
                 with EXCHANGE_LOCK:
-                    item["path"] = exchange.put_in(folder, p["in"])
+                    item["path"] = exchange.put_in(folder, folder_to, label=label)
                 item["ok"] = True
-                warn = self._mark_sent_in(folder, item["path"])
+                warn = exchange.mark_sent(folder, to, item["path"])
                 if warn:
                     item["warning"] = warn
             except MedoError as e:

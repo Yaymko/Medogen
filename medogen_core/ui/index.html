@@ -815,7 +815,7 @@ function packageView(p, opts = {}) {
     p.on_doc_uid ? [h("div", {}, "На документ"), h("div", {}, guid(p.on_doc_uid))] : null,
     p.process_uid ? [h("div", {}, "Процесс"), h("div", {}, guid(p.process_uid))] : null,
     p.taken_from ? [h("div", {}, "Забран из OUT"), h("div", {}, `стенд «${p.taken_from.stand}», ${p.taken_from.at}`, h("div", { class: "small muted mono" }, p.taken_from.out))] : null,
-    p.sent_in?.length ? [h("div", {}, "В IN"), h("div", {}, p.sent_in[p.sent_in.length - 1].at, h("div", { class: "small muted mono" }, p.sent_in[p.sent_in.length - 1].path))] : null,
+    ...["in", "out"].map(t => { const l = p["sent_" + t]; return l?.length ? [h("div", {}, "В " + t.toUpperCase()), h("div", {}, l[l.length - 1].at, h("div", { class: "small muted mono" }, l[l.length - 1].path))] : null; }),
     p.reg_process_uid ? [h("div", {}, "Процесс рег."), h("div", {}, guid(p.reg_process_uid))] : null,
     h("div", {}, "Папка"), h("div", {}, h("span", { class: "mono copy small", onclick: () => copyText(p.folder) }, p.folder))));
   const files = h("ul", { class: "files" }, ...(p.files || []).map(f => h("li", {},
@@ -833,8 +833,8 @@ function packageView(p, opts = {}) {
     p.type !== "receipt" ? replyBtn("Квитанция", "receipt") : null,
     !["receipt", "notification"].includes(p.type) ? replyBtn("Уведомление", "notification") : null,
     isAssign ? replyBtn("Событие по поручению", "assignment") : null,
-    ORGS.exchange?.in && !p.incoming ? h("button", { class: "btn small", type: "button", title: ORGS.exchange.in, onclick: async () => {
-      try { const res = await putIn([p.id]); if (res[0].ok) { Object.assign(p, await api("/api/package?id=" + encodeURIComponent(p.id))); render(); } } catch (e) { toast(e.message); } } }, "Положить в IN") : null,
+    ...["in", "out"].map(t => ORGS.exchange?.[t] && !p.incoming ? h("button", { class: "btn small", type: "button", title: ORGS.exchange[t], onclick: async () => {
+      try { const res = await putTo([p.id], t); if (res[0].ok) { Object.assign(p, await api("/api/package?id=" + encodeURIComponent(p.id))); render(); } } catch (e) { toast(e.message); } } }, "Положить в " + t.toUpperCase()) : null),
     opts.remove ? h("button", { class: "btn small danger", type: "button", onclick: opts.remove }, "Удалить") : null));
   return wrap;
 }
@@ -922,9 +922,13 @@ function renderReplies() {
   const btn = h("button", { class: "btn primary", type: "button", disabled: RP_BUSY, onclick: buildReplies });
   const count = () => { const n = kinds.filter(([k]) => RP.pick[k]).length; btn.textContent = RP_BUSY ? "Сборка…" : `Сформировать ответы (${n})`; btn.disabled = RP_BUSY || !n; };
   count();
-  if (ORGS.exchange?.in) {
-    const toIn = h("input", { type: "checkbox", checked: !!RP.to_in, onchange: () => { RP.to_in = toIn.checked; save(); } });
-    box.append(h("label", { class: "check", style: "margin-top:10px", title: ORGS.exchange.in }, toIn, h("span", {}, "Сразу положить в IN пакеты без ошибок")));
+  const dests = putTargets();
+  if (dests.length) {
+    if (RP.to_in && RP.put === undefined) RP.put = "in";  // настройка прежних версий: галочка «сразу в IN»
+    const sel = h("select", { style: "width:auto;margin-left:6px", onchange: () => { RP.put = sel.value; save(); } },
+      h("option", { value: "" }, "не класть"), ...dests.map(t => h("option", { value: t, title: ORGS.exchange[t] }, "в " + t.toUpperCase())));
+    sel.value = dests.includes(RP.put) ? RP.put : "";
+    box.append(h("label", { class: "check", style: "margin-top:10px" }, h("span", {}, "Пакеты без ошибок сразу положить "), sel));
   }
   box.append(h("div", { class: "actions", style: "margin-top:12px" }, btn,
     h("span", { class: "small muted" }, "Каждый ответ — отдельный пакет со своей папкой и проверкой XSD.")));
@@ -939,13 +943,13 @@ function renderReplies() {
       h("td", {}, typeTitle(x), h("div", { class: "small muted" }, x.name)),
       h("td", {}, x.errors?.length ? h("span", { class: "pill err", title: x.errors.join("\n") }, "ошибки") : h("span", { class: "pill ok" }, "OK")),
       h("td", { class: "mono small" }, x.msg_uid),
-      ORGS.exchange?.in ? h("td", { class: "small" }, !r.in?.[x.id] ? "—" : r.in[x.id].ok ? h("span", { class: "pill ok", title: r.in[x.id].path }, "в IN") : h("span", { class: "pill err", title: r.in[x.id].error }, "не в IN")) : null,
+      dests.length ? h("td", { class: "small" }, !r.put?.[x.id] ? "—" : r.put[x.id].ok ? h("span", { class: "pill ok", title: r.put[x.id].path }, "в " + r.put[x.id].to.toUpperCase()) : h("span", { class: "pill err", title: r.put[x.id].error }, "не в " + r.put[x.id].to.toUpperCase())) : null,
       h("td", { style: "white-space:nowrap" }, h("a", { class: "btn small", href: "/api/download?id=" + encodeURIComponent(x.id) }, ".zip"), " ",
         h("button", { class: "btn small", type: "button", onclick: () => { $("#replies").close(); switchTab("packages"); openPackage(x.id); } }, "Открыть")))))));
-    const notIn = ORGS.exchange?.in ? r.packages.filter(x => !x.errors?.length && !r.in?.[x.id]?.ok) : [];
-    if (r.packages.length > 1 || notIn.length) box.append(h("div", { class: "actions", style: "margin-top:10px" },
+    const notPut = dests.length ? r.packages.filter(x => !x.errors?.length && !r.put?.[x.id]?.ok) : [];
+    if (r.packages.length > 1 || notPut.length) box.append(h("div", { class: "actions", style: "margin-top:10px" },
       r.packages.length > 1 ? h("a", { class: "btn primary", href: "/api/download-many?ids=" + encodeURIComponent(r.packages.map(x => x.id).join(",")) }, `Скачать все ответы одним .zip`) : null,
-      notIn.length ? h("button", { class: "btn", type: "button", onclick: async () => { await sendRepliesIn(notIn); renderReplies(); } }, `Положить в IN (${notIn.length})`) : null));
+      ...(notPut.length ? dests : []).map(t => h("button", { class: "btn", type: "button", title: ORGS.exchange[t], onclick: async () => { await sendReplies(notPut, t); renderReplies(); } }, `Положить в ${t.toUpperCase()} (${notPut.length})`))));
   }
 }
 async function buildReplies() {
@@ -973,16 +977,16 @@ async function buildReplies() {
       ORGS = await api("/api/orgs/save", { stand: currentStand(), org: { key: "o_" + src.guid.slice(0, 8), guid: src.guid, name: src.name || src.guid, address: RP.addr.trim() } });
     }
     RP_RESULT = await api("/api/build", { stand: currentStand(), scenario });
-    if (RP.to_in && ORGS.exchange?.in) await sendRepliesIn(RP_RESULT.packages.filter(x => !x.errors?.length));
+    if (RP.put && putTargets().includes(RP.put)) await sendReplies(RP_RESULT.packages.filter(x => !x.errors?.length), RP.put);
   } catch (e) { RP_RESULT = { ...(RP_RESULT || { packages: [] }), error: e.message }; }
   RP_BUSY = false; await loadPackages(); renderReplies();
 }
 
-async function sendRepliesIn(list) {
+async function sendReplies(list, to) {
   if (!list.length) return;
-  RP_RESULT.in = RP_RESULT.in || {};
-  try { (await putIn(list.map(x => x.id))).forEach(x => RP_RESULT.in[x.id] = x); }
-  catch (e) { list.forEach(x => RP_RESULT.in[x.id] = { ok: false, error: e.message }); }
+  RP_RESULT.put = RP_RESULT.put || {};
+  try { (await putTo(list.map(x => x.id), to)).forEach(x => RP_RESULT.put[x.id] = { ...x, to }); }
+  catch (e) { list.forEach(x => RP_RESULT.put[x.id] = { ok: false, error: e.message, to }); }
 }
 
 // ---------- вкладка «Пакеты» ----------
@@ -1126,10 +1130,13 @@ async function takeOut(name) {
     if (card.from && !["receipt", "notification"].includes(card.type)) openReplies(card);
   } catch (e) { toast("Ошибка: " + e.message); await loadOut(); renderPackages(); }
 }
-async function putIn(ids) {
-  const r = await api("/api/exchange/put", { stand: currentStand(), ids });
-  const bad = r.results.filter(x => !x.ok);
-  toast(bad.length ? `В IN: ${r.results.length - bad.length}, не положено: ${bad.length}. ${bad[0].error}` : `В IN положено пакетов: ${r.results.length}`);
+// Куда стенд позволяет положить собранный пакет: IN (входящие для СЭД) и/или OUT (как исходящий СЭД)
+function putTargets() { return ["in", "out"].filter(t => ORGS.exchange?.[t]); }
+async function putTo(ids, to = "in") {
+  const r = await api("/api/exchange/put", { stand: currentStand(), ids, to });
+  const bad = r.results.filter(x => !x.ok), L = to.toUpperCase();
+  toast(bad.length ? `В ${L}: ${r.results.length - bad.length}, не положено: ${bad.length}. ${bad[0].error}` : `В ${L} положено пакетов: ${r.results.length}`);
+  if (to === "out" && r.results.some(x => x.ok)) OUT_DATA = null;  // «Папка OUT» перечитается при отрисовке
   return r.results;
 }
 const PF = { q: "", type: "", format: "" };
@@ -1151,7 +1158,7 @@ function relatedView(p) {
   if (parent) box.append(h("div", {}, "Основание: ", relLink(parent.id, relLabel(parent))));
   else if (me.parent) box.append(h("div", { class: "muted" }, "Основание: пакет удалён (msgUid ", guid(me.parent.msg_uid), ")"));
   if (kids.length) box.append(h("div", {}, `Ответы (${kids.length}):`, h("ul", {}, ...kids.map(c => h("li", {},
-    relLink(c.id, relLabel(c)), c.sent_in?.length ? h("span", { class: "pill ok", style: "margin-left:6px" }, "в IN") : null)))));
+    relLink(c.id, relLabel(c)), ...["in", "out"].map(t => c["sent_" + t]?.length ? h("span", { class: "pill ok", style: "margin-left:6px" }, "в " + t.toUpperCase()) : null))))));
   return box;
 }
 

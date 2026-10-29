@@ -256,6 +256,42 @@ class AppExchange(unittest.TestCase):
         again = self.app.package_card(card["folder"], with_errors=False)
         self.assertEqual(again["sent_in"][-1]["path"], target)
 
+    def test_put_to_out_lands_in_out_list(self):
+        # Alex: сгенерированный пакет можно положить не только в IN, но и в OUT стенда
+        card = self.build()
+        res = self.app.exchange_put({"stand": "default.json", "ids": [card["id"]], "to": "out"})["results"]
+        self.assertTrue(res[0]["ok"], res)
+        target = os.path.join(self.out, os.path.basename(card["folder"]))
+        self.assertEqual(res[0]["path"], target)
+        self.assertEqual(files_of(target), files_of(card["folder"]))
+        self.assertEqual(os.listdir(self.inn), [])
+        names = [i["name"] for i in self.app.exchange_out("default.json")["items"]]
+        self.assertEqual(names, [os.path.basename(card["folder"])])
+        again = self.app.package_card(card["folder"], with_errors=False)
+        self.assertEqual(again["sent_out"][-1]["path"], target)
+        self.assertFalse(again.get("sent_in"))
+
+    def test_put_to_out_refuses_existing(self):
+        card = self.build()
+        self.app.exchange_put({"stand": "default.json", "ids": [card["id"]], "to": "out"})
+        res = self.app.exchange_put({"stand": "default.json", "ids": [card["id"]], "to": "out"})["results"]
+        self.assertFalse(res[0]["ok"])
+        self.assertIn("в OUT уже есть пакет", res[0]["error"])
+
+    def test_put_to_out_needs_out_folder(self):
+        self.app.exchange_save({"stand": "default.json", "exchange": {"in": self.inn}})
+        card = self.build()
+        with self.assertRaises(MedoError) as e:
+            self.app.exchange_put({"stand": "default.json", "ids": [card["id"]], "to": "out"})
+        self.assertIn("папка OUT", str(e.exception))
+
+    def test_put_rejects_unknown_target(self):
+        card = self.build()
+        with self.assertRaises(MedoError):
+            self.app.exchange_put({"stand": "default.json", "ids": [card["id"]], "to": "archive"})
+        self.assertEqual(os.listdir(self.inn), [])
+        self.assertEqual(os.listdir(self.out), [])
+
     def test_put_batch_survives_bad_item(self):
         card = self.build()
         res = self.app.exchange_put({"stand": "default.json", "ids": [123, card["id"]]})["results"]
@@ -291,3 +327,74 @@ class AppExchange(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def run_cli(*args):
+    import subprocess
+    return subprocess.run([sys.executable, os.path.join(ROOT, "medogen.py"), *args],
+                          capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
+
+
+class CliPut(unittest.TestCase):
+    """Командная строка: build --put in|out и put кладут собранные пакеты в папки стенда."""
+
+    def setUp(self):
+        self.box = tempfile.TemporaryDirectory()
+        b = self.box.name
+        self.out, self.inn = os.path.join(b, "OUT"), os.path.join(b, "IN")
+        for d in (self.out, self.inn):
+            os.makedirs(d)
+        with open(DEFAULT_ORGS, encoding="utf-8") as f:
+            stand = json.load(f)
+        stand["exchange"] = {"out": self.out, "in": self.inn}
+        self.stand = os.path.join(b, "stand.json")
+        with open(self.stand, "w", encoding="utf-8") as f:
+            json.dump(stand, f, ensure_ascii=False)
+        self.scen = os.path.join(b, "s.json")
+        with open(self.scen, "w", encoding="utf-8") as f:
+            json.dump({"format": "3.0", "type": "document", "from": "pravit_mo", "to": ["mo_duma"]}, f)
+        self.built = os.path.join(b, "built")
+
+    def tearDown(self):
+        self.box.cleanup()
+
+    def packages(self, folder):
+        return sorted(n for n in os.listdir(folder) if os.path.isfile(os.path.join(folder, n, "envelope.ini")))
+
+    def test_build_put_out(self):
+        r = run_cli("build", self.scen, "--orgs", self.stand, "--out", self.built, "--put", "out")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.packages(self.out), self.packages(self.built))
+        self.assertEqual(len(self.packages(self.out)), 1)
+        self.assertEqual(os.listdir(self.inn), [])
+        self.assertIn("OUT", r.stdout)
+
+    def test_build_put_in(self):
+        r = run_cli("build", self.scen, "--orgs", self.stand, "--out", self.built, "--put", "in")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.packages(self.inn), self.packages(self.built))
+        self.assertEqual(os.listdir(self.out), [])
+
+    def test_put_command_existing_folder(self):
+        r = run_cli("build", self.scen, "--orgs", self.stand, "--out", self.built)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(os.listdir(self.out), [])
+        folder = os.path.join(self.built, self.packages(self.built)[0])
+        r = run_cli("put", folder, "--orgs", self.stand, "--to", "out")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.packages(self.out), [os.path.basename(folder)])
+        r = run_cli("put", folder, "--orgs", self.stand, "--to", "out")  # второй раз — уже лежит
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("в OUT уже есть пакет", r.stdout)
+
+    def test_put_refuses_invalid_package(self):
+        r = run_cli("build", self.scen, "--orgs", self.stand, "--out", self.built)
+        folder = os.path.join(self.built, self.packages(self.built)[0])
+        env = os.path.join(folder, "envelope.ini")
+        with open(env, encoding="cp1251") as f:
+            text = f.read()
+        with open(env, "w", encoding="cp1251") as f:
+            f.write(text.replace("[ФАЙЛЫ]", "[ПРОЧЕЕ]"))
+        r = run_cli("put", folder, "--orgs", self.stand, "--to", "in")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(os.listdir(self.inn), [])

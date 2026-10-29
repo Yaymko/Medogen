@@ -106,6 +106,8 @@ python medogen.py ui
 
 ```
 python medogen.py build <сценарий.json | папка> [--orgs orgs\стенд.json] [--out папка] [--zip]
+python medogen.py build ... --orgs orgs\стенд.json --put in|out   собрать и положить в IN или OUT стенда
+python medogen.py put <папка пакета> ... [--orgs orgs\стенд.json] [--to in|out]   положить готовый пакет
 python medogen.py validate <папка пакета> ...       проверить любой пакет, в том числе чужой
 python medogen.py import-orgs addresseesActual.html orgs\стенд.json --stand "Тестовый стенд"
 python medogen.py import-gas addresseesActual.html  загрузить/обновить справочник ГАС (gas\gas.json)
@@ -113,7 +115,8 @@ python medogen.py gas Тюменская область            поиск в
 python medogen.py orgs [--orgs orgs\стенд.json]     показать справочник
 ```
 
-`--zip` дополнительно упаковывает каждую папку пакета в .zip.
+`--zip` дополнительно упаковывает каждую папку пакета в .zip. `--put` и `put` берут папки IN/OUT из раздела
+`exchange` файла стенда и кладут только пакеты без ошибок проверки (как кнопки «Положить в IN/OUT»).
 
 ## Справочник организаций (GUID разные на разных стендах)
 

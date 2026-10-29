@@ -4,6 +4,8 @@
 Примеры:
   python medogen.py build examples\\30_document.json
   python medogen.py build examples --orgs orgs\\stand_test.json --zip
+  python medogen.py build examples\\30_document.json --orgs orgs\\stand_test.json --put out
+  python medogen.py put out\\30_document_01_3.0_document_ДЭВ --orgs orgs\\stand_test.json --to in
   python medogen.py validate out\\30_document_01_3.0_document_ДЭВ
   python medogen.py import-orgs addresseesActual.html orgs\\stand_test.json
   python medogen.py import-gas addresseesActual.html     (справочник ГАС: gas\\gas.json)
@@ -20,7 +22,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from medogen_core import builder, gas, importer, validate  # noqa: E402
+from medogen_core import builder, exchange, gas, importer, validate  # noqa: E402
 from medogen_core.common import WARNINGS, Directory, MedoError, load_json  # noqa: E402
 
 DEFAULT_ORGS = os.path.join(HERE, "orgs", "default.json")
@@ -34,6 +36,33 @@ def _console_utf8():
             pass
 
 
+def _stand_target(stand, to):
+    """Папка IN или OUT стенда из его файла организаций (раздел exchange)."""
+    p = exchange.paths(load_json(stand))
+    if not p:
+        raise MedoError(f"в {stand} не заданы папки обмена с СЭД (exchange: in/out)")
+    return exchange.target_dir(p, to)
+
+
+def _put(folder, target, to):
+    """Кладёт проверенный пакет в IN/OUT стенда; возвращает 1 при ошибке, 0 при успехе."""
+    label = exchange.TARGETS[to]
+    errs = validate.validate_folder(folder)
+    if errs:
+        print(f"  {folder}: ошибки проверки, в {label} не положен")
+        for e in errs:
+            print(f"    {e}")
+        return 1
+    try:
+        path = exchange.put_in(folder, target, label=label)
+    except MedoError as e:
+        print(f"  ОШИБКА: {e}")
+        return 1
+    warn = exchange.mark_sent(folder, to, path)
+    print(f"  в {label}: {path}" + (f" ({warn})" if warn else ""))
+    return 0
+
+
 def cmd_build(args):
     paths = []
     for p in args.scenarios:
@@ -42,6 +71,9 @@ def cmd_build(args):
         else:
             paths.append(p)
     orgs = args.orgs or ([DEFAULT_ORGS] if os.path.isfile(DEFAULT_ORGS) else [])
+    if args.put and not orgs:
+        raise MedoError("для --put нужен стенд: укажите --orgs")
+    target = _stand_target(orgs[0], args.put) if args.put else None
     os.makedirs(args.out, exist_ok=True)
     total_err = 0
     for path in paths:
@@ -61,6 +93,8 @@ def cmd_build(args):
                 total_err += len(errs)
             if args.zip:
                 shutil.make_archive(folder, "zip", folder)
+            if target:
+                total_err += _put(folder, target, args.put)
     if not validate.has_xsd() and not args.no_validate:
         print("Примечание: lxml не установлен, проверка по XSD пропущена (pip install lxml)")
     print(f"Готово. Предупреждений: {len(WARNINGS)}, ошибок: {total_err}")
@@ -80,6 +114,13 @@ def cmd_validate(args):
         bad += bool(errs)
     if not validate.has_xsd():
         print("Примечание: lxml не установлен, проверка по XSD пропущена (pip install lxml)")
+    return 1 if bad else 0
+
+
+def cmd_put(args):
+    stand = args.orgs or DEFAULT_ORGS
+    target = _stand_target(stand, args.to)
+    bad = sum(_put(folder, target, args.to) for folder in args.folders)
     return 1 if bad else 0
 
 
@@ -134,7 +175,15 @@ def main():
     b.add_argument("--out", default=os.path.join(HERE, "out"), help="папка для пакетов (по умолчанию out)")
     b.add_argument("--zip", action="store_true", help="дополнительно упаковать каждый пакет в .zip")
     b.add_argument("--no-validate", action="store_true", help="не проверять собранные пакеты")
+    b.add_argument("--put", choices=["in", "out"],
+                   help="положить пакеты без ошибок в папку IN или OUT стенда (первый --orgs, раздел exchange)")
     b.set_defaults(func=cmd_build)
+
+    pt = sub.add_parser("put", help="положить готовые пакеты в папку IN или OUT стенда")
+    pt.add_argument("folders", nargs="+", help="папки пакетов (с envelope.ini)")
+    pt.add_argument("--orgs", help="файл стенда с папками обмена (по умолчанию orgs/default.json)")
+    pt.add_argument("--to", choices=["in", "out"], default="in", help="куда положить: in (по умолчанию) или out")
+    pt.set_defaults(func=cmd_put)
 
     v = sub.add_parser("validate", help="проверить готовый пакет (папку с envelope.ini)")
     v.add_argument("folders", nargs="+")

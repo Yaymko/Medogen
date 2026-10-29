@@ -1,10 +1,14 @@
 """Обмен с СЭД через общие папки: OUT (исходящие СЭД), OUTArchiveGen (забранные), IN (входящие для СЭД).
+Собранный пакет можно положить и в IN, и в OUT (тогда его заберёт маршрутизация или «Забрать»).
 
 Пакет — подпапка с envelope.ini. Функции получают пути явно и не зависят от интерфейса."""
+import datetime as dt
+import json
 import os
 import shutil
 
-from .common import MedoError
+from .builder import manifest_path
+from .common import MedoError, load_json
 from .reply import read_package
 
 
@@ -111,12 +115,27 @@ def _copy_package(src, dst):
             shutil.copy2(s, os.path.join(dst, n))
 
 
-def put_in(package_dir, in_dir, name=None):
-    """Кладёт папку пакета в IN под тем же (или заданным) именем: сначала во временную папку, затем переименование."""
+TARGETS = {"in": "IN", "out": "OUT"}  # куда можно положить собранный пакет
+
+
+def target_dir(p, to="in"):
+    """Папка стенда для выкладки пакета: IN (входящие для СЭД) или OUT (как будто пакет отправила СЭД)."""
+    to = (to or "in").lower()
+    if to not in TARGETS:
+        raise MedoError(f"положить пакет можно только в IN или OUT, а не в {to!r}")
+    folder = (p or {}).get(to) or ""
+    if not folder:
+        raise MedoError(f"для стенда не задана папка {TARGETS[to]}")
+    return folder
+
+
+def put_in(package_dir, in_dir, name=None, label="IN"):
+    """Кладёт папку пакета в IN (или OUT) под тем же (или заданным) именем: сначала во временную папку,
+    затем переименование. Имя временной папки начинается с точки — list_out её не видит."""
     name = name or os.path.basename(os.path.normpath(package_dir))
     target = os.path.join(in_dir, name)
     if os.path.exists(target):
-        raise MedoError(f"в IN уже есть пакет {name}")
+        raise MedoError(f"в {label} уже есть пакет {name}")
     tmp = os.path.join(in_dir, f".{name}.medogen-tmp")
     try:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -126,3 +145,19 @@ def put_in(package_dir, in_dir, name=None):
         shutil.rmtree(tmp, ignore_errors=True)
         raise MedoError(f"не удалось положить пакет в {in_dir}: {e}")
     return target
+
+
+def mark_sent(folder, to, path):
+    """Отметка «положен в IN/OUT» (sent_in / sent_out) в манифесте пакета. Возвращает текст ошибки или None:
+    сбой отметки не отменяет саму выкладку."""
+    try:
+        mpath = manifest_path(folder)
+        old = os.path.join(folder, "manifest.json")  # пакеты старых версий
+        src = mpath if os.path.isfile(mpath) else old if os.path.isfile(old) else None
+        man = load_json(src) if src else {}
+        man.setdefault(f"sent_{to}", []).append({"at": dt.datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "path": path})
+        with open(mpath, "w", encoding="utf-8") as f:
+            json.dump(man, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return f"пакет положен в {TARGETS[to]}, но отметка не записана: {e}"
+    return None
