@@ -22,7 +22,7 @@ import webbrowser
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import builder, digital, exchange, gas, importer, router, v27, v271, validate
+from . import api, builder, digital, exchange, gas, importer, router, v27, v271, validate
 from .common import (CLASSES, KINDS, PLACES, RECEIPT_REASONS, REFUSAL_REASONS, WARNINGS,
                      Directory, MedoError, dir_stamp, load_json, safe_dir_name)
 from .reply import read_package
@@ -237,18 +237,7 @@ class App:
             dest = os.path.join(self.incoming, safe_dir_name(f"{_stamp()}_{base}"))
             os.makedirs(dest)
             if len(srcs) == 1 and zipfile.is_zipfile(srcs[0]) and not srcs[0].lower().endswith(".edc.zip"):
-                with zipfile.ZipFile(srcs[0]) as z:
-                    root = os.path.realpath(dest)
-                    for m in z.infolist():
-                        if not m.flag_bits & 0x800:  # «Сжатая папка» Windows пишет имена в cp866
-                            try:
-                                m.filename = m.filename.encode("cp437").decode("cp866")
-                            except UnicodeError:
-                                pass
-                        target = os.path.realpath(os.path.join(dest, m.filename))
-                        if target != root and not target.startswith(root + os.sep):
-                            raise MedoError(f"zip: недопустимый путь {m.filename}")
-                    z.extractall(dest, z.infolist())
+                extract_zip(srcs[0], dest)
             else:  # отдельные файлы пакета: envelope.ini, message.xml, *.edc.zip ...
                 for src in srcs:
                     shutil.copy(src, os.path.join(dest, os.path.basename(src)))
@@ -689,6 +678,22 @@ class App:
         return result
 
 
+def extract_zip(src, dest):
+    """Распаковка zip пакета в dest без выхода за её пределы. src — путь или файловый объект."""
+    with zipfile.ZipFile(src) as z:
+        root = os.path.realpath(dest)
+        for m in z.infolist():
+            if not m.flag_bits & 0x800:  # «Сжатая папка» Windows пишет имена в cp866
+                try:
+                    m.filename = m.filename.encode("cp437").decode("cp866")
+                except UnicodeError:
+                    pass
+            target = os.path.realpath(os.path.join(dest, m.filename))
+            if target != root and not target.startswith(root + os.sep):
+                raise MedoError(f"zip: недопустимый путь {m.filename}")
+        z.extractall(dest, z.infolist())
+
+
 def _link(cards):
     """parent_id у ответа и children у основного пакета. Основание ищется по папке из манифеста,
     затем по GUID сообщения; у старых квитанций без parent — по GUID сообщения, на которое они отвечают."""
@@ -716,7 +721,10 @@ _stamp = dir_stamp
 
 # --- HTTP -----------------------------------------------------------------------------------
 
-def make_handler(app):
+def make_handler(app, api_token=None, ui=True):
+    """ui=False — только /api/v1 (команда api): без страницы и внутренних адресов /api/*."""
+    rest = api.Api(app, api_token)
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "medogen-ui"
 
@@ -754,11 +762,28 @@ def make_handler(app):
                 traceback.print_exc()
                 self._send(500, {"error": f"{type(e).__name__}: {e}"})
 
+        def _rest(self):
+            """/api/v1 — HTTP API (medogen_core/api.py); True, если запрос обработан."""
+            path = urllib.parse.urlparse(self.path).path
+            if path != api.PREFIX and not path.startswith(api.PREFIX + "/"):
+                if ui:
+                    return False
+                self._send(404, {"error": "нет такого адреса: API доступно по /api/v1"})
+                return True
+            code, data, ctype, headers = rest.handle(self.command, self.path, self.headers, self._body())
+            self._send(code, data, ctype, headers)
+            return True
+
         def do_GET(self):
-            self._guard(self._get)
+            self._guard(lambda: self._rest() or self._get())
 
         def do_POST(self):
-            self._guard(self._post)
+            self._guard(lambda: self._rest() or self._post())
+
+        def do_DELETE(self):
+            self._guard(lambda: self._rest() or self._send(404, {"error": "нет такого адреса"}))
+
+        do_PUT = do_PATCH = do_DELETE
 
         def _get(self):
             url = urllib.parse.urlparse(self.path)
@@ -870,17 +895,22 @@ def start_router(app, interval):
     return stop
 
 
-def serve(root, host="127.0.0.1", port=8765, open_browser=True, route_interval=10):
+def serve(root, host="127.0.0.1", port=8765, open_browser=True, route_interval=10, api_token=None, ui=True):
     app = App(root)
-    httpd = ThreadingHTTPServer((host, port), make_handler(app))
+    httpd = ThreadingHTTPServer((host, port), make_handler(app, api_token, ui))
     url = f"http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}/"
-    print(f"Интерфейс medogen: {url}")
+    if ui:
+        print(f"Интерфейс medogen: {url}")
+    print(f"HTTP API: {url}api/v1 (описание: {url}api/v1/openapi.json, docs/API.md)"
+          + (", нужен ключ" if api_token else ""))
+    if not ui and not api_token and host not in ("127.0.0.1", "localhost"):
+        print("Внимание: API открыто в сети без ключа — задайте --token или MEDOGEN_API_TOKEN")
     print(f"Пакеты сохраняются в {app.work}")
     if route_interval > 0:
         start_router(app, route_interval)
         print(f"Маршрутизация: опрос каждые {route_interval:g} с")
     print("Остановить: Ctrl+C")
-    if open_browser:
+    if open_browser and ui:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:
         httpd.serve_forever()

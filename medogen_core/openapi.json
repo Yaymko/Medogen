@@ -1,0 +1,1607 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "medogen HTTP API",
+    "version": "1.0.0",
+    "description": "HTTP API генератора тестовых пакетов МЭДО (3.0, 2.7.1, 2.7, 2.6 и ниже). Подробное описание с примерами — docs/API.md.\n\nЗапуск: `python medogen.py api` (только API) или `python medogen.py ui` (интерфейс и API на одном порту). Ключ (`--token` или переменная MEDOGEN_API_TOKEN) передаётся в `Authorization: Bearer <ключ>` или `X-Api-Key`.\n\nИдентификатор пакета `{id}` — путь относительно out/ui; в адресе кодируйте его целиком (`/` → `%2F`)."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8765",
+      "description": "по умолчанию (python medogen.py api|ui)"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    },
+    {
+      "apiKey": []
+    },
+    {}
+  ],
+  "tags": [
+    {
+      "name": "Справочники",
+      "description": "сервис, справочники, примеры сценариев, ГАС"
+    },
+    {
+      "name": "Стенды",
+      "description": "организации стендов и папки обмена с СЭД (OUT, OUTArchiveGen, IN)"
+    },
+    {
+      "name": "Пакеты",
+      "description": "сборка, просмотр, проверка, выкладка в IN/OUT"
+    },
+    {
+      "name": "Загрузка",
+      "description": "входящие пакеты и проверка присланных архивов"
+    },
+    {
+      "name": "Маршрутизация",
+      "description": "пересылка пакетов между стендами"
+    }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "Справочники"
+        ],
+        "summary": "Состояние сервиса",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string"
+                    },
+                    "api": {
+                      "type": "string",
+                      "example": "v1"
+                    },
+                    "xsd": {
+                      "type": "boolean"
+                    },
+                    "formats": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "auth": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/meta": {
+      "get": {
+        "tags": [
+          "Справочники"
+        ],
+        "summary": "Справочники для сценариев",
+        "description": "Типы пакетов, виды документов, места, грифы, причины квитанций и отказов, уведомления, события поручений, стенды и примеры.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/examples": {
+      "get": {
+        "tags": [
+          "Справочники"
+        ],
+        "summary": "Примеры сценариев",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "file": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/openapi.json": {
+      "get": {
+        "tags": [
+          "Справочники"
+        ],
+        "summary": "Это описание (OpenAPI 3)",
+        "description": "Доступно без ключа.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/v1/gas": {
+      "get": {
+        "tags": [
+          "Справочники"
+        ],
+        "summary": "Поиск в справочнике ГАС",
+        "description": "Поиск по наименованию, GUID или адресу в gas/gas.json.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "строка поиска",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "сколько вернуть (1–1000, по умолчанию 60)",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "found": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "updated": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/stands": {
+      "get": {
+        "tags": [
+          "Стенды"
+        ],
+        "summary": "Список стендов",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Stand"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/stands/{stand}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/stand"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Стенды"
+        ],
+        "summary": "Организации и папки обмена стенда",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/stands/{stand}/check": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/stand"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Стенды"
+        ],
+        "summary": "Проверить доступ к папкам OUT, архива и IN",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "ok": {
+                        "type": "boolean"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/stands/{stand}/out": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/stand"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Стенды"
+        ],
+        "summary": "Пакеты в папке OUT стенда",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "out": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/OutItem"
+                      }
+                    },
+                    "error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/stands/{stand}/out/take": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/stand"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Стенды"
+        ],
+        "summary": "Забрать пакет из OUT во входящие",
+        "description": "Копия пакета появляется во входящих (id начинается с _incoming/), оригинал переносится в OUTArchiveGen.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "имя папки пакета в OUT"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "забран",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "package": {
+                      "$ref": "#/components/schemas/Package"
+                    },
+                    "archived": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "archive_error": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/packages": {
+      "get": {
+        "tags": [
+          "Пакеты"
+        ],
+        "summary": "Список пакетов",
+        "description": "Собранные и входящие пакеты, новые сверху (не больше 300). Без результатов проверки.",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "тип: document, gosedo, citizen_appeal, receipt, notification, assignment, incoming",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "description": "формат: 3.0, 2.7.1, 2.7, 2.6…",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "incoming",
+            "in": "query",
+            "required": false,
+            "description": "true — только входящие, false — только собранные",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "сколько вернуть (по умолчанию 100)",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Package"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Пакеты"
+        ],
+        "summary": "Собрать пакеты по сценарию или примеру",
+        "description": "Пакеты собираются в out/ui и сразу проверяются (поле errors карточки). С put пакеты без ошибок кладутся в IN или OUT стенда; итог — в поле put.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildRequest"
+              },
+              "examples": {
+                "Документ 3.0": {
+                  "value": {
+                    "stand": "default.json",
+                    "scenario": {
+                      "format": "3.0",
+                      "type": "document",
+                      "from": "pravit_mo",
+                      "to": [
+                        "mo_duma"
+                      ]
+                    }
+                  }
+                },
+                "Пример и сразу в IN": {
+                  "value": {
+                    "stand": "default.json",
+                    "example": "30_document.json",
+                    "put": "in"
+                  }
+                },
+                "Квитанция на входящий": {
+                  "value": {
+                    "stand": "default.json",
+                    "scenario": {
+                      "type": "receipt",
+                      "reply_to": "ui:_incoming/20261029-120000_пакет"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "собрано",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuildResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/BuildFailed"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/packages/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Пакеты"
+        ],
+        "summary": "Карточка пакета с результатом проверки",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Package"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Пакеты"
+        ],
+        "summary": "Удалить пакет",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/packages/{id}/archive": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Пакеты"
+        ],
+        "summary": "Скачать пакет одним zip",
+        "responses": {
+          "200": {
+            "description": "zip с файлами пакета",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/packages/{id}/files/{name}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        },
+        {
+          "name": "name",
+          "in": "path",
+          "required": true,
+          "description": "имя файла пакета (как в files[].name)",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Пакеты"
+        ],
+        "summary": "Скачать файл пакета",
+        "description": "С entry — файл внутри zip (например message.xml из container.edc.zip… или passport.xml).",
+        "parameters": [
+          {
+            "name": "entry",
+            "in": "query",
+            "required": false,
+            "description": "имя файла внутри zip (files[].entries[].name)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "содержимое файла",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/packages/{id}/validate": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Пакеты"
+        ],
+        "summary": "Проверить пакет",
+        "description": "Структура, XSD (если установлен lxml), ссылки и подписи — как кнопка проверки в интерфейсе.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/packages/{id}/put": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/id"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Пакеты"
+        ],
+        "summary": "Положить пакет в IN или OUT стенда",
+        "description": "Только собранный пакет без ошибок проверки; входящий пакет не кладётся.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PutResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/incoming": {
+      "post": {
+        "tags": [
+          "Загрузка"
+        ],
+        "summary": "Загрузить входящий пакет (для ответа на него)",
+        "description": "Тело — zip пакета (application/zip), имя — параметр name или заголовок X-Filename. Или JSON {\"path\": \"…\"} с папкой пакета на компьютере генератора. Ответ — карточка; её id подставляется в reply_to: \"ui:<id>\".",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "description": "имя пакета (для папки во входящих)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/zip": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "path"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "загружен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Package"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/validate": {
+      "post": {
+        "tags": [
+          "Загрузка"
+        ],
+        "summary": "Проверить присланный zip, ничего не сохраняя",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/zip": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/routes": {
+      "get": {
+        "tags": [
+          "Маршрутизация"
+        ],
+        "summary": "Маршруты между стендами и их состояние",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RouteState"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/routes/journal": {
+      "get": {
+        "tags": [
+          "Маршрутизация"
+        ],
+        "summary": "Журнал пересылок (новые сверху)",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "сколько записей (по умолчанию 200)",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RouteRecord"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/routes/{stand}/run": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/stand"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Маршрутизация"
+        ],
+        "summary": "Переслать сейчас",
+        "description": "Проход маршрута стенда-отправителя: новые пакеты OUT проверяются и кладутся в IN стенда-получателя. names — переслать только эти пакеты.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "names": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/RouteRecord"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "ключ API, если сервер запущен с --token"
+      },
+      "apiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Api-Key"
+      }
+    },
+    "parameters": {
+      "stand": {
+        "name": "stand",
+        "in": "path",
+        "required": true,
+        "description": "файл стенда в orgs/ (default или default.json)",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "id": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "id пакета (поле id карточки), закодированный целиком",
+        "schema": {
+          "type": "string"
+        },
+        "example": "_incoming%2F20261029-120000_пакет"
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "неверный запрос (нет поля, не JSON, не zip, путь вне рабочей папки…)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "сервер запущен с ключом, а ключ не передан или неверен",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "пакет, стенд или файл не найден",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "пакет не положен: уже есть в папке, ошибки проверки, входящий пакет",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "BuildFailed": {
+        "description": "сценарий не собрался: текст в error, подробности в log",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/BuildResult"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "текст ошибки по-русски"
+          }
+        }
+      },
+      "Scenario": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "Сценарий в формате README «Сценарий»: один пакет (format, type, from, to, document…) или {settings, defaults, packages:[…]}. Ссылка на пакет генератора в reply_to/based_on: \"ui:<id>\".",
+        "example": {
+          "format": "3.0",
+          "type": "document",
+          "from": "pravit_mo",
+          "to": [
+            "mo_duma"
+          ],
+          "document": {
+            "annotation": "О проведении мероприятий",
+            "reg_number": "П-1"
+          }
+        }
+      },
+      "BuildRequest": {
+        "type": "object",
+        "properties": {
+          "stand": {
+            "type": "string",
+            "default": "default.json",
+            "description": "файл стенда (организации, папки обмена)"
+          },
+          "scenario": {
+            "$ref": "#/components/schemas/Scenario"
+          },
+          "example": {
+            "type": "string",
+            "description": "вместо scenario — файл примера из /examples",
+            "example": "30_document.json"
+          },
+          "put": {
+            "type": "string",
+            "enum": [
+              "in",
+              "out"
+            ],
+            "description": "сразу положить пакеты без ошибок в IN или OUT стенда"
+          }
+        }
+      },
+      "BuildResult": {
+        "type": "object",
+        "properties": {
+          "packages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Package"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "log": {
+            "type": "string",
+            "description": "вывод сборки"
+          },
+          "scenario": {
+            "$ref": "#/components/schemas/Scenario"
+          },
+          "put": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PutResult"
+            },
+            "description": "только если передан put"
+          }
+        }
+      },
+      "File": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "entries": {
+            "type": "array",
+            "description": "содержимое zip (container.edc.zip и т.п.)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Package": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "карточка пакета; поля манифеста зависят от типа",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "идентификатор для адресов /packages/{id}"
+          },
+          "folder": {
+            "type": "string",
+            "description": "папка пакета на компьютере генератора"
+          },
+          "incoming": {
+            "type": "boolean",
+            "description": "входящий (загружен или забран из OUT)"
+          },
+          "created": {
+            "type": "string",
+            "example": "29.10.2026 14:00:00"
+          },
+          "format": {
+            "type": "string",
+            "example": "3.0"
+          },
+          "type": {
+            "type": "string",
+            "example": "document"
+          },
+          "name": {
+            "type": "string"
+          },
+          "msg_uid": {
+            "type": "string"
+          },
+          "doc_uid": {
+            "type": "string"
+          },
+          "reg_number": {
+            "type": "string"
+          },
+          "reg_date": {
+            "type": "string"
+          },
+          "from": {
+            "type": "object"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/File"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "ошибки проверки (только в карточке одного пакета и после сборки)"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parent_id": {
+            "type": "string",
+            "description": "пакет-основание (в списке)"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "ответы на пакет (в списке)"
+          },
+          "sent_in": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "sent_out": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "taken_from": {
+            "type": "object",
+            "description": "откуда забран входящий пакет"
+          }
+        }
+      },
+      "ValidateResult": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "xsd": {
+            "type": "boolean",
+            "description": "проверка по XSD выполнялась (установлен lxml)"
+          }
+        }
+      },
+      "PutRequest": {
+        "type": "object",
+        "properties": {
+          "stand": {
+            "type": "string",
+            "default": "default.json"
+          },
+          "to": {
+            "type": "string",
+            "enum": [
+              "in",
+              "out"
+            ],
+            "default": "in"
+          }
+        }
+      },
+      "PutResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string",
+            "description": "папка пакета в IN/OUT"
+          },
+          "error": {
+            "type": "string"
+          },
+          "warning": {
+            "type": "string",
+            "description": "пакет положен, но отметка в манифесте не записана"
+          }
+        }
+      },
+      "Stand": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "stand": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "StandDetails": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "stand": {
+            "type": "string"
+          },
+          "self": {
+            "type": "string",
+            "nullable": true,
+            "description": "ключ своей организации"
+          },
+          "exchange": {
+            "type": "object",
+            "properties": {
+              "out": {
+                "type": "string"
+              },
+              "archive": {
+                "type": "string"
+              },
+              "in": {
+                "type": "string"
+              },
+              "route_to": {
+                "type": "string"
+              },
+              "route_auto": {
+                "type": "boolean"
+              }
+            }
+          },
+          "orgs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "guid": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "address": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "OutItem": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "RouteState": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "auto": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "object"
+          }
+        }
+      },
+      "RouteRecord": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "sent",
+              "invalid",
+              "failed",
+              "resent"
+            ]
+          },
+          "in_path": {
+            "type": "string",
+            "nullable": true
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}
