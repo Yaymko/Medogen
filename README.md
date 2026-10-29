@@ -345,6 +345,21 @@ medogen_core/font_data.py (пересобрать: `python tools/make_font.py`, 
 список того, что нужно заполнить, выводится над кнопкой «Собрать пакет», и пакет не собирается,
 пока они не заполнены. Поля с подсказкой («авто», ФИО по умолчанию) можно оставлять пустыми.
 
+## HTTP API
+
+Всё, что делает интерфейс, доступно автотестам и другим системам по HTTP (JSON): собрать пакет по
+сценарию, проверить, положить в IN/OUT стенда, забрать из OUT, ответить на входящий, запустить
+маршрутизацию. API работает внутри `python medogen.py ui` (http://localhost:8765/api/v1) или
+отдельно, без интерфейса и с ключом:
+
+```
+python medogen.py api --host 0.0.0.0 --port 8766 --token СЕКРЕТ
+curl -H "Authorization: Bearer СЕКРЕТ" http://localhost:8766/api/v1/health
+```
+
+Описание с примерами — [docs/API.md](docs/API.md), OpenAPI 3 — `GET /api/v1/openapi.json`
+(файл `medogen_core/openapi.json`).
+
 ## Тесты
 
 `python -m unittest discover -s tests -v` (или run_tests.bat). Каждое замечание проверочного
@@ -392,6 +407,7 @@ medogen.py            консоль
 medogen_core/         сборка: common, model, digital, v26, v27, v271, v30, builder, reply, validate, required, importer, gas
 gas/gas.json          справочник ГАС (загружается командой import-gas или из интерфейса)
 medogen_core/webui.py веб-интерфейс (сервер), medogen_core/ui/index.html — страница
+medogen_core/api.py   HTTP API /api/v1, medogen_core/openapi.json — его описание (docs/API.md)
 xsd/2.7, xsd/2.7.1, xsd/3.0  схемы для проверки (2.7 — общая для 2.7 и 2.6)
 orgs/default.json     справочник организаций (пример)
 examples/*.json       сценарии на все виды пакетов

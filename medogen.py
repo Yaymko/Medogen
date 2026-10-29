@@ -11,7 +11,8 @@
   python medogen.py import-gas addresseesActual.html     (справочник ГАС: gas\\gas.json)
   python medogen.py gas Тюмен                             (поиск в справочнике ГАС)
   python medogen.py orgs
-  python medogen.py ui                      (веб-интерфейс для тестировщиков)
+  python medogen.py ui                      (веб-интерфейс для тестировщиков, в нём же HTTP API /api/v1)
+  python medogen.py api --port 8766 --token секрет   (только HTTP API, описание: docs/API.md)
 """
 import argparse
 import glob
@@ -164,6 +165,13 @@ def cmd_ui(args):
     return 0
 
 
+def cmd_api(args):
+    from medogen_core import webui
+    token = args.token or os.environ.get("MEDOGEN_API_TOKEN") or None
+    webui.serve(HERE, args.host, args.port, False, args.route_interval, api_token=token, ui=False)
+    return 0
+
+
 def main():
     _console_utf8()
     ap = argparse.ArgumentParser(prog="medogen", description="Генератор пакетов МЭДО 2.7.1 / 3.0")
@@ -216,6 +224,15 @@ def main():
     u.add_argument("--route-interval", type=float, default=10,
                    help="опрос маршрутов между стендами, секунд (0 — не опрашивать)")
     u.set_defaults(func=cmd_ui)
+
+    a = sub.add_parser("api", help="HTTP API без интерфейса (описание: docs/API.md, /api/v1/openapi.json)")
+    a.add_argument("--host", default="127.0.0.1",
+                   help="адрес (0.0.0.0 — доступ по сети; тогда задайте --token)")
+    a.add_argument("--port", type=int, default=8765)
+    a.add_argument("--token", help="ключ API (или переменная MEDOGEN_API_TOKEN); без него ключ не нужен")
+    a.add_argument("--route-interval", type=float, default=10,
+                   help="опрос маршрутов между стендами, секунд (0 — не опрашивать)")
+    a.set_defaults(func=cmd_api)
 
     args = ap.parse_args()
     try:
